@@ -1,0 +1,140 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'quiz_screen.dart';
+import 'video_lesson_screen.dart';
+
+class LessonListScreen extends StatelessWidget {
+  final String subject;
+  final Color color;
+  final int studentGrade;
+
+  const LessonListScreen({
+    super.key,
+    required this.subject,
+    required this.color,
+    required this.studentGrade,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // --- 1. GRADE FILTERING LOGIC ---
+    // If Grade 3 or 4: We strictly filter for ONLY that grade.
+    // If Grade 5: We fetch EVERYTHING (so your old "General" lessons appear).
+    Query query = FirebaseFirestore.instance
+        .collection('lessons')
+        .where('subject', isEqualTo: subject);
+
+    if (studentGrade != 5) {
+      query = query.where('grade', isEqualTo: studentGrade);
+    }
+    // --------------------------------
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("$subject (Grade $studentGrade)"),
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: query.snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+          var docs = snapshot.data!.docs;
+
+          if (docs.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.school_outlined, size: 60, color: Colors.grey.shade400),
+                  const SizedBox(height: 16),
+                  Text(
+                    "No Grade $studentGrade lessons yet.",
+                    style: const TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              var data = docs[index].data() as Map<String, dynamic>;
+              String title = data['title'] ?? subject;
+              String lessonId = docs[index].id;
+              String? videoUrl = data['videoUrl'];
+              int? lessonGrade = data['grade'];
+
+              // --- 2. RESTORE DESCRIPTION (SINHALA TEXT) ---
+              // If 'description' exists in DB, show it. Otherwise show default text.
+              String description = data['description'] ?? "Click to start lesson";
+              // ---------------------------------------------
+
+              // Optional: UI Filter for Grade 5
+              // If I am Grade 5, I don't want to see "Grade 3" lessons (too easy).
+              // But I DO want to see "null" lessons (my old data).
+              if (studentGrade == 5 && (lessonGrade == 3 || lessonGrade == 4)) {
+                return const SizedBox.shrink(); // Hide this item
+              }
+
+              return Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                margin: const EdgeInsets.only(bottom: 16),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(20),
+                  leading: CircleAvatar(
+                    backgroundColor: color.withOpacity(0.2),
+                    radius: 30,
+                    child: Icon(Icons.star, color: color, size: 30),
+                  ),
+                  title: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+
+                  // This is where the paragraph will now appear!
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                  ),
+
+                  trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey),
+                  onTap: () {
+                    if (videoUrl != null && videoUrl.isNotEmpty) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => VideoLessonScreen(
+                            title: title,
+                            videoUrl: videoUrl,
+                          ),
+                        ),
+                      );
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => QuizScreen(
+                            lessonId: lessonId,
+                            subject: subject,
+                            grade: studentGrade,
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "213942877787",
+    "project_id": "sisupal-782d3",
+    "storage_bucket": "sisupal-782d3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:213942877787:android:6249e9f9918679e83a497e",
+        "android_client_info": {
+          "package_name": "com.example.sisupal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAQHBZC-N3sizvd8jQ-wPU8iNIFZmupK4Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
