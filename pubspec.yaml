@@ -13,11 +13,11 @@ dependencies:
   # --- YOUR PACKAGES ---
   syncfusion_flutter_pdfviewer: ^24.1.41
   cupertino_icons: ^1.0.8
-  flutter_tts: ^4.2.5
+  flutter_tts: ^3.8.5
   audioplayers: ^6.0.0
   confetti: ^0.7.0
   youtube_player_flutter: ^9.0.1
-  pdf: ^3.10.8
+  pdf: ^3.11.3
   printing: ^5.11.1
   image_picker: ^1.0.4
   firebase_storage: ^12.4.10
@@ -35,6 +35,9 @@ dependencies:
   # UI & State
   google_fonts: ^6.0.0
   provider: ^6.0.0
+  shared_preferences: ^2.5.3
+  path_provider: ^2.1.5
+  share_plus: ^12.0.1
 
 dev_dependencies:
   flutter_test:
@@ -47,3 +50,4 @@ flutter:
   assets:
     - assets/images/
     - assets/pdfs/
+    - assets/sounds/

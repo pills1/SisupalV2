@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import '../utils/app_theme.dart';
+import '../widgets/animated_widgets.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
 import 'report_preview_screen.dart';
@@ -24,6 +26,8 @@ class _ParentDashboardState extends State<ParentDashboard> {
   bool _isLoading = false;
   bool _isLinked = false;
   String? _errorMessage;
+  int _achievementCount = 0;
+  int _videosWatched = 0;
 
   @override
   void initState() {
@@ -150,10 +154,26 @@ class _ParentDashboardState extends State<ParentDashboard> {
         return hData;
       }).toList();
 
+      // Fetch achievements count
+      final achievementsSnapshot = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('achievements')
+          .get();
+
+      // Fetch videos watched count
+      final videosSnapshot = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('video_progress')
+          .get();
+
       setState(() {
         _studentData = data;
         _examHistory = historyList;
         _isLinked = isLinked;
+        _achievementCount = achievementsSnapshot.docs.length;
+        _videosWatched = videosSnapshot.docs.length;
       });
     } catch (e) {
       print("Error loading: $e");
@@ -303,6 +323,20 @@ class _ParentDashboardState extends State<ParentDashboard> {
                 )
               ],
 
+              // --- ENHANCED: QUICK STATS ROW ---
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  _buildQuickStat("⭐", "${_studentData!['xp'] ?? 0}", "XP", AppColors.primaryGradient),
+                  const SizedBox(width: 8),
+                  _buildQuickStat("🔥", "${_studentData!['streak'] ?? 0}", "Day Streak", AppColors.sunsetGradient),
+                  const SizedBox(width: 8),
+                  _buildQuickStat("🏆", "$_achievementCount", "Badges", AppColors.successGradient),
+                  const SizedBox(width: 8),
+                  _buildQuickStat("📺", "$_videosWatched", "Videos", const LinearGradient(colors: [Colors.red, Colors.redAccent])),
+                ],
+              ),
+
               // --- REPORT CARD BUTTON ---
               Card(
                   elevation: 4,
@@ -402,6 +436,27 @@ class _ParentDashboardState extends State<ParentDashboard> {
           const SizedBox(height: 8),
           Text("${percentage.toInt()}%", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuickStat(String emoji, String value, String label, Gradient gradient) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 5, offset: const Offset(0, 2))],
+        ),
+        child: Column(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 20)),
+            const SizedBox(height: 4),
+            Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+            Text(label, style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.9))),
+          ],
+        ),
       ),
     );
   }

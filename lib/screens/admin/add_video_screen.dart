@@ -4,8 +4,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class AddVideoScreen extends StatefulWidget {
   final Map<String, dynamic>? existingData;
   final String? docId;
+  final int? prefilledGrade;
+  final String? prefilledSubject;
 
-  const AddVideoScreen({super.key, this.existingData, this.docId});
+  const AddVideoScreen({
+    super.key, 
+    this.existingData, 
+    this.docId,
+    this.prefilledGrade,
+    this.prefilledSubject,
+  });
 
   @override
   State<AddVideoScreen> createState() => _AddVideoScreenState();
@@ -50,6 +58,14 @@ class _AddVideoScreenState extends State<AddVideoScreen> {
         _selectedGrade = widget.existingData!['targetGrade'];
       }
       // ----------------------------------
+    } else {
+      // Use prefilled values if provided (when adding from grade/subject screen)
+      if (widget.prefilledGrade != null) {
+        _selectedGrade = widget.prefilledGrade!;
+      }
+      if (widget.prefilledSubject != null) {
+        _selectedCategory = widget.prefilledSubject!;
+      }
     }
   }
 
