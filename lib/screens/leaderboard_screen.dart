@@ -302,7 +302,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
               ),
               child: ClipOval(
                 child: avatar.isNotEmpty
-                    ? Image.network(avatar, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _defaultAvatar())
+                    ? (avatar.startsWith('http')
+                        ? Image.network(avatar, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _defaultAvatar())
+                        : Center(child: Text(avatar, style: const TextStyle(fontSize: 28))))
                     : _defaultAvatar(),
               ),
             ),
@@ -423,9 +425,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
             children: [
               CircleAvatar(
                 radius: 22,
-                backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
+                backgroundImage: avatar.isNotEmpty && avatar.startsWith('http') ? NetworkImage(avatar) : null,
                 backgroundColor: Colors.blue.shade100,
-                child: avatar.isEmpty ? const Icon(Icons.person, color: Colors.blue) : null,
+                child: avatar.isEmpty
+                    ? const Icon(Icons.person, color: Colors.blue)
+                    : (avatar.startsWith('http') ? null : Text(avatar, style: const TextStyle(fontSize: 22))),
               ),
               Positioned(
                 bottom: 0,

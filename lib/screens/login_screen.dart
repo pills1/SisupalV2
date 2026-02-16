@@ -251,20 +251,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           ),
                         ],
                       ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      // Teacher login (hidden)
-                      TextButton(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const AdminDashboard()),
-                        ),
-                        child: Text(
-                          "Teacher Login",
-                          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
-                        ),
-                      ),
+
                     ],
                   ),
                 ),
@@ -329,7 +316,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     if (user != null) {
       String? role = await _authService.getUserRole(user.uid);
       if (mounted) {
-        if (role == 'Parent') {
+        if (role == 'Admin') {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminDashboard()));
+        } else if (role == 'Parent') {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ParentDashboard()));
         } else {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const StudentDashboard()));

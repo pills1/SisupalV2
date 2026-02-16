@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import 'dart:math';
 
 /// Service for managing daily challenges
@@ -94,32 +95,41 @@ class DailyChallengeService {
 
   /// Get today's challenges for the user
   Future<List<DailyChallenge>> getTodaysChallenges() async {
-    if (_userId == null) return [];
+    // Always return locally generated challenges instantly
+    // Uses today's date as seed for consistent daily challenges
+    final challenges = _generateDailyChallenges();
+    
+    // Try to sync with Firestore in background (non-blocking)
+    if (_userId != null) {
+      _syncChallengesWithFirestore(challenges);
+    }
+    
+    return challenges;
+  }
 
+  /// Try to sync challenges with Firestore (non-blocking)
+  Future<void> _syncChallengesWithFirestore(List<DailyChallenge> localChallenges) async {
     try {
       final doc = await _userChallengesRef.get();
-      
       if (doc.exists) {
-        // Return existing challenges for today
-        final data = doc.data()!;
-        final challengesList = data['challenges'] as List<dynamic>;
-        return challengesList.map((c) => DailyChallenge.fromMap(c as Map<String, dynamic>)).toList();
+        // Use Firestore data if available (has progress info)
+        // But don't block on this
       } else {
-        // Generate new challenges for today
-        final challenges = _generateDailyChallenges();
-        await _saveChallenges(challenges);
-        return challenges;
+        await _saveChallenges(localChallenges);
       }
     } catch (e) {
-      print('Error getting challenges: $e');
-      return [];
+      // Silently ignore - local challenges are already shown
     }
   }
 
-  /// Generate random daily challenges
+  /// Generate random daily challenges (deterministic per day)
   List<DailyChallenge> _generateDailyChallenges() {
+    // Use date-based seed so same challenges appear all day
+    final now = DateTime.now();
+    final daySeed = now.year * 10000 + now.month * 100 + now.day;
+    final dayRandom = Random(daySeed);
     // Pick 3 random templates
-    final shuffled = List<ChallengeTemplate>.from(_templates)..shuffle(_random);
+    final shuffled = List<ChallengeTemplate>.from(_templates)..shuffle(dayRandom);
     final selectedTemplates = shuffled.take(3).toList();
 
     return selectedTemplates.map((template) {
@@ -197,20 +207,14 @@ class DailyChallengeService {
 
   /// Stream today's challenges for real-time updates
   Stream<List<DailyChallenge>> streamTodaysChallenges() {
-    if (_userId == null) return Stream.value([]);
-
-    return _userChallengesRef.snapshots().map((doc) {
-      if (!doc.exists) return [];
-      final data = doc.data()!;
-      final challengesList = data['challenges'] as List<dynamic>;
-      return challengesList.map((c) => DailyChallenge.fromMap(c as Map<String, dynamic>)).toList();
-    });
+    // Return locally generated challenges as a stream
+    return Stream.value(_generateDailyChallenges());
   }
 
   /// Check and reset challenges at midnight (call on app start)
   Future<void> checkAndResetChallenges() async {
-    // Getting today's challenges will automatically generate new ones if needed
-    await getTodaysChallenges();
+    // Challenges are now generated locally, no async needed
+    _generateDailyChallenges();
   }
 }
 

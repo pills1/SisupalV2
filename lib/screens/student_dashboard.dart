@@ -5,8 +5,6 @@ import 'package:lottie/lottie.dart';
 import '../utils/app_theme.dart';
 import '../widgets/animated_widgets.dart';
 import '../widgets/gamification_widgets.dart';
-import '../widgets/challenge_carousel.dart';
-import '../services/daily_challenge_service.dart';
 import '../services/progress_service.dart';
 import '../services/sound_service.dart';
 import '../services/notification_service.dart';
@@ -35,7 +33,6 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
   int _userXP = 0;
   
   late AnimationController _fabAnimController;
-  final DailyChallengeService _challengeService = DailyChallengeService();
   final ProgressService _progressService = ProgressService();
   final SoundService _soundService = SoundService();
   final NotificationService _notificationService = NotificationService();
@@ -49,7 +46,7 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
     );
     _checkStreak();
     _fetchUserData();
-    _challengeService.checkAndResetChallenges();
+
     _sendWelcomeNotificationIfNeeded();
   }
 
@@ -212,13 +209,13 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.primaryDark,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryDark.withOpacity(0.3),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 20,
-            offset: const Offset(0, 10),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -228,9 +225,9 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
           currentIndex: _selectedIndex,
           onTap: _onItemTapped,
           type: BottomNavigationBarType.fixed,
-          backgroundColor: AppColors.primaryDark,
-          selectedItemColor: AppColors.gold,
-          unselectedItemColor: Colors.grey.shade500,
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF6C5CE7),
+          unselectedItemColor: Colors.grey.shade400,
           showUnselectedLabels: true,
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
           unselectedLabelStyle: const TextStyle(fontSize: 11),
@@ -252,7 +249,7 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.gold.withOpacity(0.2) : Colors.transparent,
+          color: isSelected ? const Color(0xFF6C5CE7).withOpacity(0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(icon, size: isSelected ? 28 : 24),
@@ -260,6 +257,7 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
       label: label,
     );
   }
+
 
   AppBar _buildHomeAppBar() {
     final user = FirebaseAuth.instance.currentUser;
@@ -295,7 +293,9 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
                     ),
                     child: ClipOval(
                       child: avatar.isNotEmpty
-                          ? Image.network(avatar, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _defaultAvatar())
+                          ? (avatar.startsWith('http')
+                              ? Image.network(avatar, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _defaultAvatar())
+                              : Center(child: Text(avatar, style: const TextStyle(fontSize: 28))))
                           : _defaultAvatar(),
                     ),
                   ),
@@ -407,31 +407,6 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Daily Challenges Carousel
-            SlideInWidget(
-              delay: const Duration(milliseconds: 100),
-              child: StreamBuilder<List<DailyChallenge>>(
-                stream: _challengeService.streamTodaysChallenges(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return DailyChallengeCard(
-                      title: "Daily Challenge",
-                      description: "Loading challenges...",
-                      xpReward: 50,
-                      progress: 0.0,
-                      onTap: () {},
-                    );
-                  }
-                  return DailyChallengesCarousel(
-                    challenges: snapshot.data!,
-                    onChallengeTap: (challenge) {
-                      // Could navigate to relevant screen based on challenge type
-                    },
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 20),
 
             // Stats Row
             SlideInWidget(

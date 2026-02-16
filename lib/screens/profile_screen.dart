@@ -147,11 +147,16 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     border: Border.all(color: Colors.white, width: 4),
-                                    image: DecorationImage(
-                                      image: NetworkImage(currentAvatar),
-                                      fit: BoxFit.cover,
-                                    ),
+                                    image: currentAvatar.startsWith('http')
+                                        ? DecorationImage(
+                                            image: NetworkImage(currentAvatar),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
                                   ),
+                                  child: !currentAvatar.startsWith('http')
+                                      ? Center(child: Text(currentAvatar, style: const TextStyle(fontSize: 48)))
+                                      : null,
                                 ),
                                 // Edit badge
                                 Positioned(

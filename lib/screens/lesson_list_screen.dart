@@ -17,9 +17,6 @@ class LessonListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- 1. GRADE FILTERING LOGIC ---
-    // If Grade 3 or 4: We strictly filter for ONLY that grade.
-    // If Grade 5: We fetch EVERYTHING (so your old "General" lessons appear).
     Query query = FirebaseFirestore.instance
         .collection('lessons')
         .where('subject', isEqualTo: subject);
@@ -27,9 +24,9 @@ class LessonListScreen extends StatelessWidget {
     if (studentGrade != 5) {
       query = query.where('grade', isEqualTo: studentGrade);
     }
-    // --------------------------------
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF0F4F8),
       appBar: AppBar(
         title: Text("$subject (Grade $studentGrade)"),
         backgroundColor: color,
@@ -67,17 +64,10 @@ class LessonListScreen extends StatelessWidget {
               String lessonId = docs[index].id;
               String? videoUrl = data['videoUrl'];
               int? lessonGrade = data['grade'];
-
-              // --- 2. RESTORE DESCRIPTION (SINHALA TEXT) ---
-              // If 'description' exists in DB, show it. Otherwise show default text.
               String description = data['description'] ?? "Click to start lesson";
-              // ---------------------------------------------
 
-              // Optional: UI Filter for Grade 5
-              // If I am Grade 5, I don't want to see "Grade 3" lessons (too easy).
-              // But I DO want to see "null" lessons (my old data).
               if (studentGrade == 5 && (lessonGrade == 3 || lessonGrade == 4)) {
-                return const SizedBox.shrink(); // Hide this item
+                return const SizedBox.shrink();
               }
 
               return Card(
@@ -92,8 +82,6 @@ class LessonListScreen extends StatelessWidget {
                     child: Icon(Icons.star, color: color, size: 30),
                   ),
                   title: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-
-                  // This is where the paragraph will now appear!
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Text(
@@ -103,7 +91,6 @@ class LessonListScreen extends StatelessWidget {
                       style: TextStyle(color: Colors.grey.shade700),
                     ),
                   ),
-
                   trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey),
                   onTap: () {
                     if (videoUrl != null && videoUrl.isNotEmpty) {

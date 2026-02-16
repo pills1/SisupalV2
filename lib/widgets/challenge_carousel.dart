@@ -25,6 +25,15 @@ class DailyChallengesCarousel extends StatefulWidget {
 }
 
 class _DailyChallengesCarouselState extends State<DailyChallengesCarousel> {
+  final PageController _pageController = PageController(viewportFraction: 0.88);
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.challenges.isEmpty) {
@@ -37,75 +46,310 @@ class _DailyChallengesCarouselState extends State<DailyChallengesCarousel> {
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF6C5CE7).withOpacity(0.1),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header with colored background
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6C5CE7), Color(0xFFA29BFE)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.flag_circle, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                const Text(
-                  "Daily Challenges",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6C5CE7), Color(0xFFA29BFE)],
                   ),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    "${widget.challenges.where((c) => c.completed).length}/${widget.challenges.length}",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.flag_circle, color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      "Daily Challenges",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        "${widget.challenges.where((c) => c.completed).length}/${widget.challenges.length}",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          // All challenges in a vertical list
-          ...widget.challenges.map((challenge) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _CompactChallengeItem(
-              challenge: challenge,
-              onTap: () => widget.onChallengeTap?.call(challenge),
+        ),
+        const SizedBox(height: 12),
+        // Horizontally scrollable challenge cards
+        SizedBox(
+          height: 145,
+          child: PageView.builder(
+            controller: _pageController,
+            onPageChanged: (index) {
+              setState(() => _currentPage = index);
+            },
+            itemCount: widget.challenges.length,
+            itemBuilder: (context, index) {
+              final challenge = widget.challenges[index];
+              return AnimatedPadding(
+                duration: const Duration(milliseconds: 300),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: _currentPage == index ? 0 : 8,
+                ),
+                child: _HorizontalChallengeCard(
+                  challenge: challenge,
+                  onTap: () => widget.onChallengeTap?.call(challenge),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        // Page indicator dots
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(widget.challenges.length, (index) {
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              width: _currentPage == index ? 24 : 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: _currentPage == index
+                    ? const Color(0xFF6C5CE7)
+                    : const Color(0xFF6C5CE7).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+}
+
+/// Horizontal challenge card for swipeable carousel
+class _HorizontalChallengeCard extends StatelessWidget {
+  final DailyChallenge challenge;
+  final VoidCallback? onTap;
+
+  const _HorizontalChallengeCard({
+    required this.challenge,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isCompleted = challenge.completed;
+    final List<Color> gradientColors = _getGradientColors(challenge.type, isCompleted);
+
+    return GestureDetector(
+      onTap: isCompleted ? null : onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: gradientColors.first.withOpacity(0.35),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
             ),
-          )),
-        ],
+          ],
+        ),
+        child: Stack(
+          children: [
+            // Background decoration
+            Positioned(
+              right: -20,
+              top: -20,
+              child: Icon(
+                _getChallengeIcon(challenge.type),
+                size: 100,
+                color: Colors.white.withOpacity(0.08),
+              ),
+            ),
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      // Icon
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isCompleted ? Icons.check_circle : _getChallengeIcon(challenge.type),
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              challenge.title,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              challenge.description,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 12,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      // XP badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.star, color: Colors.amber, size: 14),
+                            const SizedBox(width: 3),
+                            Text(
+                              "+${challenge.xpReward}",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  // Progress bar
+                  if (!isCompleted) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: challenge.progressPercentage,
+                              backgroundColor: Colors.white.withOpacity(0.2),
+                              valueColor: const AlwaysStoppedAnimation(Colors.white),
+                              minHeight: 6,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          "${challenge.progress}/${challenge.target}",
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle_outline, color: Colors.white, size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          "Completed! 🎉",
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.95),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  List<Color> _getGradientColors(ChallengeType type, bool completed) {
+    if (completed) return [const Color(0xFF00B894), const Color(0xFF55EFC4)];
+    switch (type) {
+      case ChallengeType.quizComplete:
+        return [const Color(0xFF6C5CE7), const Color(0xFFA29BFE)];
+      case ChallengeType.perfectQuiz:
+        return [const Color(0xFFFF6B6B), const Color(0xFFFF9FF3)];
+      case ChallengeType.combo:
+        return [const Color(0xFFFF9F43), const Color(0xFFFECA57)];
+      case ChallengeType.lessonComplete:
+        return [const Color(0xFF0984E3), const Color(0xFF74B9FF)];
+      case ChallengeType.videoWatch:
+        return [const Color(0xFFE17055), const Color(0xFFFAB1A0)];
+      case ChallengeType.earnXP:
+        return [const Color(0xFFD63031), const Color(0xFFFF7675)];
+    }
+  }
+
+  IconData _getChallengeIcon(ChallengeType type) {
+    switch (type) {
+      case ChallengeType.quizComplete:
+        return Icons.quiz;
+      case ChallengeType.perfectQuiz:
+        return Icons.verified;
+      case ChallengeType.combo:
+        return Icons.local_fire_department;
+      case ChallengeType.lessonComplete:
+        return Icons.school;
+      case ChallengeType.videoWatch:
+        return Icons.play_circle;
+      case ChallengeType.earnXP:
+        return Icons.star;
+    }
   }
 }
 
