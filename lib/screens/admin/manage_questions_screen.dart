@@ -34,8 +34,6 @@ class _ManageQuestionsScreenState extends State<ManageQuestionsScreen> {
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             underline: Container(), // Remove underline
             items: const [
-              DropdownMenuItem(value: 3, child: Text("Grade 3")),
-              DropdownMenuItem(value: 4, child: Text("Grade 4")),
               DropdownMenuItem(value: 5, child: Text("Grade 5")),
             ],
             onChanged: (val) {

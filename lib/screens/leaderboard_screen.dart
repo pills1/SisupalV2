@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/app_theme.dart';
 import '../widgets/animated_widgets.dart';
-import '../widgets/gamification_widgets.dart';
+import '../widgets/user_avatar.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -164,11 +164,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
                     docs.length > 3 ? docs.length - 3 : 0,
                     (index) {
                       final actualIndex = index + 3;
-                      var data = docs[actualIndex].data() as Map<String, dynamic>;
-                      String name = data['name'] ?? "Unknown";
+                      final data = docs[actualIndex].data() as Map<String, dynamic>? ?? {};
+                      String name = (data['name'] as String?)?.trim().isNotEmpty == true
+                          ? data['name']
+                          : (data['studentName'] as String?)?.trim().isNotEmpty == true
+                              ? data['studentName']
+                              : (data['displayName'] as String?)?.trim().isNotEmpty == true
+                                  ? data['displayName']
+                                  : "Student ${actualIndex + 1}";
                       int xp = data['xp'] ?? 0;
                       String uid = docs[actualIndex].id;
-                      String avatar = data['avatar'] ?? '';
+                      String avatar = AppAvatars.extractAvatarString(data['avatar']);
                       bool isMe = (currentUser?.uid == uid);
                       int level = LevelSystem.getLevel(xp);
 
@@ -196,9 +202,37 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
 
   Widget _buildPodium(List<QueryDocumentSnapshot> topThree, User? currentUser) {
     // Reorder: [1st, 0th, 2nd] for visual podium (2nd place, 1st place, 3rd place)
-    final first = topThree[0].data() as Map<String, dynamic>;
-    final second = topThree.length > 1 ? topThree[1].data() as Map<String, dynamic> : null;
-    final third = topThree.length > 2 ? topThree[2].data() as Map<String, dynamic> : null;
+    final first = topThree[0].data() as Map<String, dynamic>? ?? {};
+    final second = topThree.length > 1 ? topThree[1].data() as Map<String, dynamic>? ?? {} : null;
+    final third = topThree.length > 2 ? topThree[2].data() as Map<String, dynamic>? ?? {} : null;
+
+    final firstName = (first['name'] as String?)?.trim().isNotEmpty == true
+        ? first['name']
+        : (first['studentName'] as String?)?.trim().isNotEmpty == true
+            ? first['studentName']
+            : (first['displayName'] as String?)?.trim().isNotEmpty == true
+                ? first['displayName']
+                : "Top Student";
+
+    final secondName = second != null
+        ? ((second['name'] as String?)?.trim().isNotEmpty == true
+            ? second['name']
+            : (second['studentName'] as String?)?.trim().isNotEmpty == true
+                ? second['studentName']
+                : (second['displayName'] as String?)?.trim().isNotEmpty == true
+                    ? second['displayName']
+                    : "Student 2")
+        : "Unknown";
+
+    final thirdName = third != null
+        ? ((third['name'] as String?)?.trim().isNotEmpty == true
+            ? third['name']
+            : (third['studentName'] as String?)?.trim().isNotEmpty == true
+                ? third['studentName']
+                : (third['displayName'] as String?)?.trim().isNotEmpty == true
+                    ? third['displayName']
+                    : "Student 3")
+        : "Unknown";
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -213,9 +247,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
                 delay: const Duration(milliseconds: 200),
                 child: _buildPodiumItem(
                   rank: 2,
-                  name: second['name'] ?? "Unknown",
+                  name: secondName,
                   xp: second['xp'] ?? 0,
-                  avatar: second['avatar'] ?? '',
+                  avatar: AppAvatars.extractAvatarString(second['avatar']),
                   height: 100,
                   color: AppColors.silver,
                   isMe: currentUser?.uid == topThree[1].id,
@@ -229,9 +263,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
               delay: const Duration(milliseconds: 100),
               child: _buildPodiumItem(
                 rank: 1,
-                name: first['name'] ?? "Unknown",
+                name: firstName,
                 xp: first['xp'] ?? 0,
-                avatar: first['avatar'] ?? '',
+                avatar: AppAvatars.extractAvatarString(first['avatar']),
                 height: 140,
                 color: AppColors.gold,
                 isMe: currentUser?.uid == topThree[0].id,
@@ -246,9 +280,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
                 delay: const Duration(milliseconds: 300),
                 child: _buildPodiumItem(
                   rank: 3,
-                  name: third['name'] ?? "Unknown",
+                  name: thirdName,
                   xp: third['xp'] ?? 0,
-                  avatar: third['avatar'] ?? '',
+                  avatar: AppAvatars.extractAvatarString(third['avatar']),
                   height: 80,
                   color: AppColors.bronze,
                   isMe: currentUser?.uid == topThree[2].id,
@@ -300,12 +334,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
                   ),
                 ],
               ),
-              child: ClipOval(
-                child: avatar.isNotEmpty
-                    ? (avatar.startsWith('http')
-                        ? Image.network(avatar, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _defaultAvatar())
-                        : Center(child: Text(avatar, style: const TextStyle(fontSize: 28))))
-                    : _defaultAvatar(),
+              child: UserAvatar(
+                avatar: avatar,
+                size: rank == 1 ? 76 : 60,
               ),
             ),
             // Level badge
@@ -423,13 +454,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
           // Avatar
           Stack(
             children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundImage: avatar.isNotEmpty && avatar.startsWith('http') ? NetworkImage(avatar) : null,
-                backgroundColor: Colors.blue.shade100,
-                child: avatar.isEmpty
-                    ? const Icon(Icons.person, color: Colors.blue)
-                    : (avatar.startsWith('http') ? null : Text(avatar, style: const TextStyle(fontSize: 22))),
+              UserAvatar(
+                avatar: avatar,
+                size: 44,
               ),
               Positioned(
                 bottom: 0,
@@ -497,13 +524,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
           ),
         ],
       ),
-    );
-  }
-
-  Widget _defaultAvatar() {
-    return Container(
-      color: Colors.blue.shade100,
-      child: const Icon(Icons.person, color: Colors.blue),
     );
   }
 }

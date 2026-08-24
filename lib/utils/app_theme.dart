@@ -24,6 +24,7 @@ class AppColors {
   static const Color sinhalaViolet = Color(0xFF8E44AD);
   static const Color environmentGreen = Color(0xFF27AE60);
   static const Color languageTeal = Color(0xFF16A085);
+  static const Color buddhismAmber = Color(0xFFF39C12);
   
   // Gradient Presets
   static const LinearGradient primaryGradient = LinearGradient(
@@ -61,6 +62,43 @@ class AppColors {
     begin: Alignment.bottomCenter,
     end: Alignment.topCenter,
   );
+}
+
+/// Centralized asset paths for Mathematics Kingdom
+class MathsAssets {
+  static const String parrotIdle = 'assets/images/maths_parrot_idle.png';
+  static const String mangoBead = 'assets/images/mango_bead.png';
+
+  // Golden Mango Story Characters
+  static const String lionIdle = 'assets/images/char_lion_idle.png';
+  static const String elephantIdle = 'assets/images/char_elephant_guide_idle.png';
+  static const String foxIdle = 'assets/images/char_fox_trickster_idle.png';
+
+  // Golden Mango Story Backgrounds
+  static const String bgJungleMap = 'assets/images/bg_c1_jungle_map.png';
+  static const String bgAbacusRiver = 'assets/images/bg_c2_abacus_river.png';
+  static const String bgGiantGate = 'assets/images/bg_c3_giant_gate.png';
+  static const String bgCavePedestals = 'assets/images/bg_c4_cave_pedestals.png';
+  static const String bgTreasureChest = 'assets/images/bg_c5_treasure_chest.png';
+
+  // Great Number Train Backgrounds
+  static const String bgTrainStation = 'assets/images/number_train_station.png';
+  static const String bgTrainInterior = 'assets/images/number_train_interior.png';
+  static const String bgTrainCountryside = 'assets/images/number_train_countryside.png';
+  static const String bgTrainMountainStation = 'assets/images/number_train_mountain_station.png';
+  static const String bgTrainStormTunnel = 'assets/images/number_train_storm_tunnel.png';
+  static const String bgTrainFinalStation = 'assets/images/number_train_final_station.png';
+  static const String bgTrainMap = 'assets/images/number_train_map.png';
+
+  // Math Mini-Games 2D Assets
+  static const String frogIdle = 'assets/images/games/frog_idle.png';
+  static const String lilyPad = 'assets/images/games/lily_pad.png';
+  static const String goldenLotus = 'assets/images/games/golden_lotus.png';
+  static const String archeryBow = 'assets/images/games/bow_and_arrow.png';
+  static const String archeryArrow = 'assets/images/games/arrow_flying.png';
+  static const String archeryTarget = 'assets/images/games/archery_target.png';
+  static const String archeryCrosshair = 'assets/images/games/crosshair.png';
+  static const String abacusMangoBead = 'assets/images/games/mango_bead.png';
 }
 
 class AppShadows {
@@ -106,6 +144,13 @@ class LevelSystem {
   
   static int getLevel(int xp) => (xp / xpPerLevel).floor() + 1;
   
+  /// XP earned within the current level (0 to 99)
+  static int getCurrentLevelXP(int currentXP) {
+    int currentLevel = getLevel(currentXP);
+    int xpForCurrentLevel = (currentLevel - 1) * xpPerLevel;
+    return currentXP - xpForCurrentLevel;
+  }
+
   static int getXPForNextLevel(int currentXP) {
     int currentLevel = getLevel(currentXP);
     return currentLevel * xpPerLevel;
@@ -307,7 +352,7 @@ class AppTheme {
       ),
       
       // Card Theme
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.large),
@@ -408,7 +453,7 @@ class AppTheme {
       ),
       
       // Card Theme
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.large),

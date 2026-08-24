@@ -100,7 +100,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
                             ),
                           ),
                           Text(
-                            "Grade $_studentGrade",
+                            "Grade 5 Scholarship",
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
                               fontSize: 14,
@@ -123,16 +123,12 @@ class _VideoListScreenState extends State<VideoListScreen> {
 
               // Video List
               Expanded(
-                child: _isLoadingGrade
-                    ? Center(
-                        child: CircularProgressIndicator(color: _categoryColor),
-                      )
-                    : StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('videos')
-                            .where('category', isEqualTo: widget.category)
-                            .where('targetGrade', isEqualTo: _studentGrade)
-                            .snapshots(),
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('videos')
+                      .where('category', isEqualTo: widget.category)
+                      .where('targetGrade', isEqualTo: 5)
+                      .snapshots(),
                         builder: (context, snapshot) {
                           if (!snapshot.hasData) {
                             return Center(

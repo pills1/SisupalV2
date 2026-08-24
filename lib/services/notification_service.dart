@@ -10,6 +10,8 @@ enum NotificationType {
   achievementUnlock,
   dailyChallenge,
   levelUp,
+  mathsQuest,
+  pastPaper,
 }
 
 /// Notification model
@@ -59,7 +61,6 @@ class AppNotification {
 }
 
 /// Notification service for managing in-app notifications
-/// Note: For web platform, we use in-app notifications instead of push notifications
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -155,10 +156,8 @@ class NotificationService {
     final lastReminder = prefs.getString(lastReminderKey);
     final today = DateTime.now().toIso8601String().split('T')[0];
 
-    // Only send one reminder per day
     if (lastReminder == today) return;
 
-    // Check user's last activity
     final userDoc = await _firestore.collection('users').doc(_userId).get();
     final userData = userDoc.data();
     if (userData == null) return;
@@ -168,8 +167,6 @@ class NotificationService {
 
     if (lastActive != null) {
       final hoursSinceActive = DateTime.now().difference(lastActive.toDate()).inHours;
-      
-      // If user hasn't been active for 12+ hours, send reminder
       if (hoursSinceActive >= 12 && streak > 0) {
         await createNotification(
           title: "🔥 Don't lose your streak!",
@@ -217,13 +214,43 @@ class NotificationService {
     );
   }
 
-  /// Send welcome notification (for testing)
-  Future<void> sendWelcomeNotification() async {
+  /// Send Maths Kingdom Adventure Quest notification
+  Future<void> sendMathsQuestNotification() async {
     await createNotification(
-      title: "👋 Welcome to SisuPal!",
-      body: "Start learning by completing quizzes and watch your XP grow!",
-      type: NotificationType.quizReminder,
+      title: "🦜 New Maths Quest Available!",
+      body: "Lesson 1: සංඛ්‍යා - 1 (Numbers - Part 1) is ready on the Adventure Map!",
+      type: NotificationType.mathsQuest,
     );
+  }
+
+  /// Send Scholarship Past Papers notification
+  Future<void> sendPastPapersNotification() async {
+    await createNotification(
+      title: "📄 Scholarship Past Papers Ready!",
+      body: "Grade 5 Scholarship Past Papers (2021, 2022, 2023) are ready for practice!",
+      type: NotificationType.pastPaper,
+    );
+  }
+
+  /// Send welcome & initial educational notifications
+  Future<void> sendWelcomeNotification() async {
+    if (_userId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final initKey = 'initial_notifications_sent_$_userId';
+    final alreadySent = prefs.getBool(initKey) ?? false;
+
+    if (!alreadySent) {
+      await createNotification(
+        title: "👋 Welcome to SisuPal 2.0!",
+        body: "Start your Grade 5 learning adventure today and earn XP!",
+        type: NotificationType.quizReminder,
+      );
+      await sendMathsQuestNotification();
+      await sendPastPapersNotification();
+      await notifyDailyChallenge();
+
+      await prefs.setBool(initKey, true);
+    }
   }
 }
 
@@ -237,7 +264,7 @@ class NotificationBadge extends StatelessWidget {
     super.key,
     required this.onTap,
     this.iconColor = Colors.blue,
-    this.backgroundColor = const Color(0xFFE3F2FD), // Light blue background
+    this.backgroundColor = const Color(0xFFE3F2FD),
   });
 
   @override

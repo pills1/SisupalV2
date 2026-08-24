@@ -199,11 +199,9 @@ class _AddQuestionScreenState extends State<AddQuestionScreen> {
                     value: _selectedGrade,
                     isExpanded: true,
                     items: const [
-                      DropdownMenuItem(value: 3, child: Text("For Grade 3 Students")),
-                      DropdownMenuItem(value: 4, child: Text("For Grade 4 Students")),
-                      DropdownMenuItem(value: 5, child: Text("For Grade 5 (Scholarship)")),
+                      DropdownMenuItem(value: 5, child: Text("For Grade 5 (Scholarship Exam)")),
                     ],
-                    onChanged: (val) => setState(() => _selectedGrade = val!),
+                    onChanged: (val) => setState(() => _selectedGrade = val ?? 5),
                   ),
                 ),
               ),

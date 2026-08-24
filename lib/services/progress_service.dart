@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../models/maths/golden_mango_exercise_models.dart';
 
 /// Service for tracking user progress per subject
 class ProgressService {
@@ -19,12 +20,43 @@ class ProgressService {
     return _firestore.collection('users').doc(_userId).collection('progress');
   }
 
+  /// Normalize subject names (e.g. 'maths' -> 'mathematics')
+  static String normalizeSubject(String subject) {
+    final s = subject.trim().toLowerCase();
+    if (s == 'maths' || s == 'math' || s == 'mathematics') {
+      return 'mathematics';
+    }
+    return s;
+  }
+
+  /// Concept ID aliases mapping to prevent naming mismatches
+  static final Map<String, List<String>> _conceptAliases = {
+    'c1_jungle_map': ['c1_map_reading', 'c1'],
+    'c1_map_reading': ['c1_jungle_map', 'c1'],
+    'c2_river_of_beads': ['c2_abacus_river', 'c2'],
+    'c2_abacus_river': ['c2_river_of_beads', 'c2'],
+    'c3_giants_gate': ['c3_place_value_gate', 'c3'],
+    'c3_place_value_gate': ['c3_giants_gate', 'c3'],
+    'c4_crystal_cavern': ['c4_cave_pedestals', 'c4'],
+    'c4_cave_pedestals': ['c4_crystal_cavern', 'c4'],
+    'c5_golden_chest': ['c5_golden_mango_chest', 'c5'],
+    'c5_golden_mango_chest': ['c5_golden_chest', 'c5'],
+  };
+
   /// Get progress for a specific subject
   Future<SubjectProgress> getSubjectProgress(String subject) async {
     try {
-      final doc = await _progressRef.doc(subject.toLowerCase()).get();
+      final normalized = normalizeSubject(subject);
+      final doc = await _progressRef.doc(normalized).get();
       if (doc.exists) {
         return SubjectProgress.fromMap(doc.data()!, subject);
+      }
+      // Check legacy doc fallback
+      if (normalized == 'mathematics') {
+        final legacyDoc = await _progressRef.doc('maths').get();
+        if (legacyDoc.exists) {
+          return SubjectProgress.fromMap(legacyDoc.data()!, subject);
+        }
       }
       return SubjectProgress(subject: subject);
     } catch (e) {
@@ -48,12 +80,78 @@ class ProgressService {
     }
   }
 
+  /// Mark a concept as completed
+  Future<void> completeConcept(String subject, String lessonId, String conceptId) async {
+    if (_userId == null) return;
+
+    try {
+      final normalized = normalizeSubject(subject);
+      final docRef = _progressRef.doc(normalized);
+      final doc = await docRef.get();
+
+      List<String> completedConcepts = [];
+      if (doc.exists) {
+        completedConcepts =
+            List<String>.from(doc.data()?['completedConcepts'] ?? []);
+      }
+
+      // Check legacy 'maths' doc if empty
+      if (completedConcepts.isEmpty && normalized == 'mathematics') {
+        final legacyDoc = await _progressRef.doc('maths').get();
+        if (legacyDoc.exists) {
+          completedConcepts.addAll(
+            List<String>.from(legacyDoc.data()?['completedConcepts'] ?? []),
+          );
+        }
+      }
+
+      // Collect all aliases for this concept
+      final allIdsToAdd = <String>{conceptId};
+      if (_conceptAliases.containsKey(conceptId)) {
+        allIdsToAdd.addAll(_conceptAliases[conceptId]!);
+      }
+
+      bool isNewCompletion = false;
+      for (final cid in allIdsToAdd) {
+        if (!completedConcepts.contains(cid)) {
+          completedConcepts.add(cid);
+          isNewCompletion = true;
+        }
+      }
+
+      if (isNewCompletion) {
+        final payload = {
+          'subject': 'Mathematics',
+          'completedConcepts': completedConcepts,
+          'lastUpdated': FieldValue.serverTimestamp(),
+        };
+
+        // Write to primary 'mathematics' doc
+        await docRef.set(payload, SetOptions(merge: true));
+
+        // Mirror to legacy 'maths' doc
+        if (normalized == 'mathematics') {
+          await _progressRef.doc('maths').set(payload, SetOptions(merge: true));
+        }
+
+        // 🌟 Award +100 XP to the student's profile!
+        await _firestore.collection('users').doc(_userId).set({
+          'xp': FieldValue.increment(100),
+          'lastActiveDate': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      print('Error completing concept: $e');
+    }
+  }
+
   /// Mark a lesson as completed
   Future<void> completeLesson(String subject, String lessonId) async {
     if (_userId == null) return;
 
     try {
-      final docRef = _progressRef.doc(subject.toLowerCase());
+      final normalized = normalizeSubject(subject);
+      final docRef = _progressRef.doc(normalized);
       final doc = await docRef.get();
 
       List<String> completedLessons = [];
@@ -63,10 +161,21 @@ class ProgressService {
 
       if (!completedLessons.contains(lessonId)) {
         completedLessons.add(lessonId);
-        await docRef.set({
-          'subject': subject,
+        final payload = {
+          'subject': 'Mathematics',
           'completedLessons': completedLessons,
           'lastUpdated': FieldValue.serverTimestamp(),
+        };
+
+        await docRef.set(payload, SetOptions(merge: true));
+        if (normalized == 'mathematics') {
+          await _progressRef.doc('maths').set(payload, SetOptions(merge: true));
+        }
+
+        // 👑 Award bonus +200 XP for completing a full lesson!
+        await _firestore.collection('users').doc(_userId).set({
+          'xp': FieldValue.increment(200),
+          'lastActiveDate': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       }
     } catch (e) {
@@ -132,12 +241,96 @@ class ProgressService {
   }
 
   /// Stream for real-time progress updates
+  /// Record a detailed itemized question attempt for analytics & adaptive tracking
+  Future<void> recordQuestionAttempt({
+    required String lessonId,
+    required String conceptId,
+    required String questionId,
+    required int attemptNumber,
+    required String answerGiven,
+    required String correctAnswer,
+    required bool isCorrect,
+    required int timeTakenSeconds,
+    required bool hintUsed,
+    required int hintLevel,
+    required String skillTag,
+    required int difficulty,
+  }) async {
+    if (_userId == null) return;
+
+    try {
+      final attemptLog = QuestionAttemptLog(
+        studentId: _userId!,
+        lessonId: lessonId,
+        conceptId: conceptId,
+        questionId: questionId,
+        attemptNumber: attemptNumber,
+        answerGiven: answerGiven,
+        correctAnswer: correctAnswer,
+        isCorrect: isCorrect,
+        timeTakenSeconds: timeTakenSeconds,
+        hintUsed: hintUsed,
+        hintLevel: hintLevel,
+        skillTag: skillTag,
+        difficulty: difficulty,
+      );
+
+      await _firestore
+          .collection('users')
+          .doc(_userId)
+          .collection('question_attempts')
+          .add(attemptLog.toMap());
+    } catch (e) {
+      print('Error recording question attempt: $e');
+    }
+  }
+
   Stream<SubjectProgress> streamProgress(String subject) {
     if (_userId == null) return Stream.value(SubjectProgress(subject: subject));
-    
-    return _progressRef.doc(subject.toLowerCase()).snapshots().map((doc) {
-      if (doc.exists) {
-        return SubjectProgress.fromMap(doc.data()!, subject);
+
+    final normalized = normalizeSubject(subject);
+    final primaryDocRef = _progressRef.doc(normalized);
+
+    return primaryDocRef.snapshots().asyncMap((doc) async {
+      Map<String, dynamic> data = doc.exists ? Map<String, dynamic>.from(doc.data()!) : {};
+
+      // If mathematics, merge with legacy 'maths' document if it exists
+      if (normalized == 'mathematics') {
+        try {
+          final legacyDoc = await _progressRef.doc('maths').get();
+          if (legacyDoc.exists && legacyDoc.data() != null) {
+            final legacyConcepts = List<String>.from(legacyDoc.data()?['completedConcepts'] ?? []);
+            final currentConcepts = List<String>.from(data['completedConcepts'] ?? []);
+            final mergedConcepts = <String>{...currentConcepts, ...legacyConcepts}.toList();
+
+            // Expand all concept aliases
+            final expandedConcepts = <String>{...mergedConcepts};
+            for (final cid in mergedConcepts) {
+              if (_conceptAliases.containsKey(cid)) {
+                expandedConcepts.addAll(_conceptAliases[cid]!);
+              }
+            }
+
+            data['completedConcepts'] = expandedConcepts.toList();
+
+            final legacyLessons = List<String>.from(legacyDoc.data()?['completedLessons'] ?? []);
+            final currentLessons = List<String>.from(data['completedLessons'] ?? []);
+            data['completedLessons'] = <String>{...currentLessons, ...legacyLessons}.toList();
+          }
+        } catch (_) {}
+      }
+
+      if (data.isNotEmpty) {
+        // Expand aliases in data['completedConcepts'] as well
+        final rawConcepts = List<String>.from(data['completedConcepts'] ?? []);
+        final expanded = <String>{...rawConcepts};
+        for (final cid in rawConcepts) {
+          if (_conceptAliases.containsKey(cid)) {
+            expanded.addAll(_conceptAliases[cid]!);
+          }
+        }
+        data['completedConcepts'] = expanded.toList();
+        return SubjectProgress.fromMap(data, subject);
       }
       return SubjectProgress(subject: subject);
     });
@@ -148,12 +341,14 @@ class ProgressService {
 class SubjectProgress {
   final String subject;
   final List<String> completedLessons;
+  final List<String> completedConcepts;
   final Map<String, QuizScore> quizScores;
   final DateTime? lastUpdated;
 
   SubjectProgress({
     required this.subject,
     this.completedLessons = const [],
+    this.completedConcepts = const [],
     this.quizScores = const {},
     this.lastUpdated,
   });
@@ -177,6 +372,7 @@ class SubjectProgress {
     return SubjectProgress(
       subject: subject,
       completedLessons: List<String>.from(map['completedLessons'] ?? []),
+      completedConcepts: List<String>.from(map['completedConcepts'] ?? []),
       quizScores: quizScores,
       lastUpdated: map['lastUpdated'] != null 
           ? (map['lastUpdated'] as Timestamp).toDate() 

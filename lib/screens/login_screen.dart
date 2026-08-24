@@ -272,25 +272,31 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: Colors.grey.shade100,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: Colors.grey.shade300),
       ),
       child: TextField(
         controller: controller,
         obscureText: isPassword && !_isPasswordVisible,
         keyboardType: keyboardType,
+        style: const TextStyle(color: Color(0xFF1A202C), fontSize: 15, fontWeight: FontWeight.w500),
+        cursorColor: const Color(0xFF667eea),
         decoration: InputDecoration(
+          filled: true,
+          fillColor: Colors.grey.shade100,
           labelText: label,
-          labelStyle: TextStyle(color: Colors.grey.shade600),
+          labelStyle: TextStyle(color: Colors.grey.shade700),
           prefixIcon: Icon(icon, color: const Color(0xFF667eea)),
           border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           suffixIcon: isPassword
               ? IconButton(
                   icon: Icon(
                     _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                    color: Colors.grey,
+                    color: Colors.grey.shade600,
                   ),
                   onPressed: () {
                     setState(() => _isPasswordVisible = !_isPasswordVisible);

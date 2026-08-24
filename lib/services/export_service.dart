@@ -1,14 +1,11 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:printing/printing.dart';
 
-/// Service for exporting analytics data as PDF or CSV
+/// Service for exporting analytics and progress data as PDF
 class ExportService {
   static final ExportService _instance = ExportService._internal();
   factory ExportService() => _instance;
@@ -19,52 +16,9 @@ class ExportService {
 
   String? get _userId => _auth.currentUser?.uid;
 
-  /// Export quiz history as CSV
-  Future<String?> exportQuizHistoryCSV() async {
-    if (_userId == null) return null;
-
-    // Fetch quiz results
-    final snapshot = await _firestore
-        .collection('users')
-        .doc(_userId)
-        .collection('exam_results')
-        .orderBy('date', descending: true)
-        .get();
-
-    if (snapshot.docs.isEmpty) {
-      throw Exception('No quiz history to export');
-    }
-
-    // Build CSV content
-    final buffer = StringBuffer();
-    buffer.writeln('Date,Quiz Title,Score,Total,Percentage,Max Combo');
-
-    for (var doc in snapshot.docs) {
-      final data = doc.data();
-      final date = (data['date'] as Timestamp?)?.toDate();
-      final dateStr = date != null 
-          ? DateFormat('yyyy-MM-dd HH:mm').format(date)
-          : 'Unknown';
-      final title = data['examTitle'] ?? 'Unknown Quiz';
-      final score = data['score'] ?? 0;
-      final total = data['total'] ?? 0;
-      final percentage = total > 0 ? ((score / total) * 100).toStringAsFixed(1) : '0';
-      final combo = data['maxCombo'] ?? 0;
-
-      buffer.writeln('$dateStr,"$title",$score,$total,$percentage%,$combo');
-    }
-
-    // Save and share the file
-    final filePath = await _saveFile(buffer.toString(), 'quiz_history.csv');
-    if (filePath != null) {
-      await Share.shareXFiles([XFile(filePath)], text: 'Quiz History Export');
-    }
-    return filePath;
-  }
-
-  /// Export progress report as PDF
-  Future<String?> exportProgressPDF({String? studentName}) async {
-    if (_userId == null) return null;
+  /// Export progress report as PDF (Works seamlessly on Web, Android, iOS, Windows)
+  Future<bool> exportProgressPDF({String? studentName}) async {
+    if (_userId == null) return false;
 
     // Fetch user data
     final userDoc = await _firestore.collection('users').doc(_userId).get();
@@ -79,7 +33,7 @@ class ExportService {
         .doc(_userId)
         .collection('exam_results')
         .orderBy('date', descending: true)
-        .limit(20) // Last 20 quizzes
+        .limit(20)
         .get();
 
     // Fetch achievements
@@ -93,134 +47,170 @@ class ExportService {
     int totalQuizzes = quizSnapshot.docs.length;
     int totalCorrect = 0;
     int totalQuestions = 0;
-    
+
     for (var doc in quizSnapshot.docs) {
       final data = doc.data();
-      totalCorrect += (data['score'] as int?) ?? 0;
-      totalQuestions += (data['total'] as int?) ?? 0;
+      final num scoreVal = data['score'] is num ? data['score'] : 0;
+      final num totalVal = data['total'] is num ? data['total'] : 0;
+      totalCorrect += scoreVal.toInt();
+      totalQuestions += totalVal.toInt();
     }
-    
-    double overallAccuracy = totalQuestions > 0 
-        ? (totalCorrect / totalQuestions) * 100 
+
+    double overallAccuracy = totalQuestions > 0
+        ? (totalCorrect / totalQuestions) * 100
         : 0;
 
-    // Build PDF
+    // Build PDF Document
     final pdf = pw.Document();
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(40),
+        margin: const pw.EdgeInsets.all(36),
         build: (context) => [
           // Header
           pw.Header(
             level: 0,
-            child: pw.Text(
-              'SisuPal Progress Report',
-              style: pw.TextStyle(
-                fontSize: 24,
-                fontWeight: pw.FontWeight.bold,
-              ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'SisuPal Progress Report',
+                  style: pw.TextStyle(
+                    fontSize: 22,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blue800,
+                  ),
+                ),
+                pw.Text(
+                  DateFormat('yyyy-MM-dd').format(DateTime.now()),
+                  style: const pw.TextStyle(color: PdfColors.grey700),
+                ),
+              ],
             ),
           ),
-          pw.SizedBox(height: 10),
-          pw.Text('Student: $name'),
+          pw.SizedBox(height: 8),
+          pw.Text('Student: ${_cleanText(name)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
           pw.Text('Generated: ${DateFormat('MMMM d, yyyy').format(DateTime.now())}'),
           pw.Divider(),
-          pw.SizedBox(height: 20),
+          pw.SizedBox(height: 14),
 
-          // Overall Stats
+          // Overall Performance Stats
           pw.Header(level: 1, text: 'Overall Performance'),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
             children: [
               _buildStatBox('Total XP', '$xp'),
-              _buildStatBox('Streak', '$streak days'),
+              _buildStatBox('Streak', '$streak Days'),
               _buildStatBox('Quizzes', '$totalQuizzes'),
               _buildStatBox('Accuracy', '${overallAccuracy.toStringAsFixed(1)}%'),
             ],
           ),
-          pw.SizedBox(height: 20),
+          pw.SizedBox(height: 16),
 
           // Achievements
-          pw.Header(level: 1, text: 'Achievements Unlocked'),
-          pw.Text('${achievementSnapshot.docs.length} badges earned'),
-          pw.SizedBox(height: 20),
+          pw.Header(level: 1, text: 'Achievements'),
+          pw.Text('${achievementSnapshot.docs.length} badges earned across learning activities'),
+          pw.SizedBox(height: 16),
 
-          // Recent Quiz History
-          pw.Header(level: 1, text: 'Recent Quiz Results'),
-          pw.Table.fromTextArray(
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            headers: ['Date', 'Quiz', 'Score', 'Result'],
-            data: quizSnapshot.docs.map((doc) {
-              final data = doc.data();
-              final date = (data['date'] as Timestamp?)?.toDate();
-              final dateStr = date != null 
-                  ? DateFormat('MMM d').format(date)
-                  : '-';
-              final title = data['examTitle'] ?? '-';
-              final score = data['score'] ?? 0;
-              final total = data['total'] ?? 0;
-              final percentage = total > 0 ? (score / total) * 100 : 0;
-              final result = percentage >= 70 ? 'Pass' : 'Needs Work';
-              
-              return [dateStr, title, '$score/$total', result];
-            }).toList(),
+          // Recent Quiz History Table
+          pw.Header(level: 1, text: 'Recent Activity & Quiz Results'),
+          if (quizSnapshot.docs.isEmpty)
+            pw.Text('No quiz attempts recorded yet.')
+          else
+            pw.Table.fromTextArray(
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blue800),
+              rowDecoration: const pw.BoxDecoration(
+                border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
+              ),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              headers: ['Date', 'Topic / Quiz', 'Score', 'Result'],
+              data: quizSnapshot.docs.map((doc) {
+                final data = doc.data();
+                final date = (data['date'] as Timestamp?)?.toDate();
+                final dateStr = date != null
+                    ? DateFormat('MMM d, yyyy').format(date)
+                    : '-';
+                final title = _cleanText(data['examTitle'] ?? 'Mathematics Activity');
+                final num score = data['score'] is num ? data['score'] : 0;
+                final num total = data['total'] is num ? data['total'] : 0;
+                final percentage = total > 0 ? (score / total) * 100 : 0;
+                final result = percentage >= 70 ? 'Pass' : 'Needs Practice';
+
+                return [dateStr, title, '$score/$total', result];
+              }).toList(),
+            ),
+
+          pw.SizedBox(height: 24),
+          pw.Divider(),
+          pw.Center(
+            child: pw.Text(
+              'SisuPal Learning Platform - Keep Up The Great Work!',
+              style: const pw.TextStyle(color: PdfColors.grey600, fontSize: 10),
+            ),
           ),
         ],
       ),
     );
 
-    // Save and share PDF
+    // Save & share or layout PDF cross-platform
     final bytes = await pdf.save();
-    final filePath = await _savePdfFile(bytes, 'progress_report.pdf');
-    if (filePath != null) {
-      await Share.shareXFiles([XFile(filePath)], text: 'SisuPal Progress Report');
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'SisuPal_Progress_Report.pdf',
+    );
+    return true;
+  }
+
+  static String _cleanText(dynamic raw) {
+    if (raw == null) return '';
+    String text = raw.toString();
+    // Remove emojis
+    text = text.replaceAll(
+      RegExp(r'[\u{1F300}-\u{1F9FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}|\u{1F600}-\u{1F64F}|\u{1F680}-\u{1F6FF}]', unicode: true),
+      '',
+    );
+    // Map Sinhala titles to clean English names for standard PDF fonts
+    if (text.contains('පුනරීක්ෂණ') || text.contains('පුනරීක්ෂණය')) {
+      text = 'Mathematics Revision Session';
+    } else if (text.contains('ගණක රාමුව')) {
+      text = 'Abacus Challenge';
+    } else if (text.contains('දිය ගෙම්බාගේ')) {
+      text = 'Lily Pad Leap (Patterns)';
+    } else if (text.contains('ඉලක්කයට')) {
+      text = 'Number Archery (Rounding)';
+    } else if (text.contains('ඉලක්කම් සකස්')) {
+      text = 'Digit Builder Challenge';
+    } else if (text.contains('ස්ථානීය අගය')) {
+      text = 'Place Value Explorer';
+    } else if (text.contains('විහිදුවා')) {
+      text = 'Expanded Form Builder';
+    } else if (text.contains('ඉක්මන් සංඛ්‍යා')) {
+      text = 'Rapid Number Challenge';
+    } else if (text.contains(RegExp(r'[\u0D80-\u0DFF]'))) {
+      text = 'Grade 5 Mathematics Activity';
     }
-    return filePath;
+    return text.trim();
   }
 
   pw.Widget _buildStatBox(String label, String value) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(12),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: PdfColors.grey400),
-        borderRadius: pw.BorderRadius.circular(8),
+        borderRadius: pw.BorderRadius.circular(6),
       ),
       child: pw.Column(
         children: [
           pw.Text(
             value,
-            style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
           ),
-          pw.SizedBox(height: 4),
-          pw.Text(label, style: const pw.TextStyle(fontSize: 10)),
+          pw.SizedBox(height: 2),
+          pw.Text(label, style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
         ],
       ),
     );
-  }
-
-  Future<String?> _saveFile(String content, String filename) async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/$filename');
-      await file.writeAsString(content);
-      return file.path;
-    } catch (e) {
-      print('Error saving file: $e');
-      return null;
-    }
-  }
-
-  Future<String?> _savePdfFile(List<int> bytes, String filename) async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/$filename');
-      await file.writeAsBytes(bytes);
-      return file.path;
-    } catch (e) {
-      print('Error saving PDF: $e');
-      return null;
-    }
   }
 }

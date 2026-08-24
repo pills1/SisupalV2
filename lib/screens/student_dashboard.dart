@@ -8,6 +8,7 @@ import '../widgets/gamification_widgets.dart';
 import '../services/progress_service.dart';
 import '../services/sound_service.dart';
 import '../services/notification_service.dart';
+import '../widgets/user_avatar.dart';
 import 'login_screen.dart';
 import 'lesson_list_screen.dart';
 import 'past_paper_selector.dart';
@@ -18,6 +19,9 @@ import 'mistakes_screen.dart';
 import 'video_hub_screen.dart';
 import 'history_screen.dart';
 import 'notifications_screen.dart';
+import 'maths_kingdom_screen.dart';
+import 'games_screen.dart';
+import 'user_guide_screen.dart';
 
 class StudentDashboard extends StatefulWidget {
   const StudentDashboard({super.key});
@@ -89,16 +93,23 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
       final doc = await userRef.get();
       if (!doc.exists) {
         await userRef.set({
-          'streak': 1, 'xp': 0, 'lastLogin': FieldValue.serverTimestamp(), 'email': user.email, 'grade': 3,
+          'streak': 1,
+          'xp': 0,
+          'lastLogin': FieldValue.serverTimestamp(),
+          'email': user.email,
+          'name': user.displayName ?? 'Student',
+          'studentName': user.displayName ?? 'Student',
+          'displayName': user.displayName ?? 'Student',
+          'grade': 5,
         }, SetOptions(merge: true));
         if (mounted) setState(() => _streak = 1);
         return;
       }
       final data = doc.data() as Map<String, dynamic>;
       final lastLoginTs = data['lastLogin'] as Timestamp?;
-      int currentStreak = data['streak'] ?? 0;
+      int currentStreak = data['streak'] ?? 1;
       int currentXP = data['xp'] ?? 0;
-      int newStreak = 1;
+      int newStreak = currentStreak;
       int bonusXP = 0;
       bool showPopup = false;
 
@@ -114,15 +125,24 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
           newStreak = currentStreak + 1;
           bonusXP = 50;
           showPopup = true;
+        } else if (difference > 1) {
+          newStreak = 1;
         }
       }
-      await userRef.update({'lastLogin': FieldValue.serverTimestamp(), 'streak': newStreak, 'xp': currentXP + bonusXP});
+
+      await userRef.update({
+        'lastLogin': FieldValue.serverTimestamp(),
+        'streak': newStreak,
+        'xp': currentXP + bonusXP,
+      });
       if (mounted) setState(() => _streak = newStreak);
 
       if (showPopup && mounted) {
         _showStreakDialog(newStreak, bonusXP);
       }
-    } catch (e) { print("Error checking streak: $e"); }
+    } catch (e) {
+      print("Error checking streak: $e");
+    }
   }
 
   void _showStreakDialog(int streak, int xp) {
@@ -185,8 +205,9 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
     switch (_selectedIndex) {
       case 0: return _buildHomeTab();
       case 1: return const VideoHubScreen();
-      case 2: return const LeaderboardScreen();
-      case 3: return const ProfileScreen();
+      case 2: return GamesScreen(studentGrade: _studentGrade);
+      case 3: return const LeaderboardScreen();
+      case 4: return const ProfileScreen();
       default: return _buildHomeTab();
     }
   }
@@ -234,8 +255,9 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
           items: [
             _buildNavItem(Icons.home_rounded, 'Home', 0),
             _buildNavItem(Icons.play_circle_fill, 'Classes', 1),
-            _buildNavItem(Icons.emoji_events, 'Rank', 2),
-            _buildNavItem(Icons.person, 'Profile', 3),
+            _buildNavItem(Icons.sports_esports_rounded, 'Games', 2),
+            _buildNavItem(Icons.emoji_events, 'Rank', 3),
+            _buildNavItem(Icons.person, 'Profile', 4),
           ],
         ),
       ),
@@ -258,46 +280,64 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
     );
   }
 
-
   AppBar _buildHomeAppBar() {
-    final user = FirebaseAuth.instance.currentUser;
     return AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
       toolbarHeight: 80,
       title: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(FirebaseAuth.instance.currentUser?.uid)
+            .snapshots(),
         builder: (context, snapshot) {
+          final currentUser = FirebaseAuth.instance.currentUser;
           String name = "Student";
           String avatar = "";
           int xp = 0;
+
           if (snapshot.hasData && snapshot.data!.exists) {
             final data = snapshot.data!.data() as Map<String, dynamic>?;
-            name = data?['name'] ?? "Student";
-            avatar = data?['avatar'] ?? "";
-            xp = data?['xp'] ?? 0;
+            if (data != null) {
+              // Prioritize child / student name keys in order
+              for (final key in [
+                'studentName',
+                'student_name',
+                'name',
+                'displayName',
+                'display_name',
+                'fullName',
+              ]) {
+                final val = data[key];
+                if (val is String && val.trim().isNotEmpty) {
+                  name = val.trim();
+                  break;
+                }
+              }
+              if (name == "Student" && data['parentName'] is String && (data['parentName'] as String).trim().isNotEmpty) {
+                name = (data['parentName'] as String).trim();
+              }
+              avatar = AppAvatars.extractAvatarString(data['avatar']);
+              xp = data['xp'] ?? 0;
+            }
           }
+
+          if (name == "Student" && currentUser?.displayName != null && currentUser!.displayName!.trim().isNotEmpty) {
+            name = currentUser.displayName!.trim();
+          }
+
           final level = LevelSystem.getLevel(xp);
           
           return Row(
             children: [
               // Avatar with level ring
               Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: LevelSystem.getLevelColor(level), width: 3),
-                    ),
-                    child: ClipOval(
-                      child: avatar.isNotEmpty
-                          ? (avatar.startsWith('http')
-                              ? Image.network(avatar, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _defaultAvatar())
-                              : Center(child: Text(avatar, style: const TextStyle(fontSize: 28))))
-                          : _defaultAvatar(),
-                    ),
+                  UserAvatar(
+                    avatar: avatar,
+                    size: 50,
+                    border: Border.all(color: LevelSystem.getLevelColor(level), width: 3),
                   ),
                   Positioned(
                     right: -2,
@@ -331,14 +371,50 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
         },
       ),
       actions: [
+        // User Guide Mascot Button
+        BouncingButton(
+          onPressed: () => UserGuideScreen.show(context),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFF9F43), Color(0xFFFF6B35)],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF6B35).withOpacity(0.3),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text("🦜", style: TextStyle(fontSize: 14)),
+                SizedBox(width: 4),
+                Text(
+                  "Guide",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
         // Streak Badge
         StreakFlame(streak: _streak, size: 36),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         // Notification Badge
         NotificationBadge(
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         // History Button
         Container(
           margin: const EdgeInsets.only(right: 8),
@@ -362,14 +438,137 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
     );
   }
 
-  /// Build subject card with real progress data from Firestore
+  void _showLockedSubjectDialog(BuildContext context, String subjectName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: EdgeInsets.zero,
+        content: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2C3E50), Color(0xFF4CA1AF)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.lock_clock, color: Colors.white, size: 48),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "🔒 $subjectName",
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "$subjectName will be available in an upcoming update! Stay tuned.",
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF2C3E50),
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text(
+                  "Got it!",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build subject card with real progress data from Firestore or locked status badge
   Widget _buildSubjectCard({
     required String subject,
     required IconData icon,
     required Color color,
     required int delay,
     required VoidCallback onTap,
+    bool isLocked = false,
   }) {
+    if (isLocked) {
+      return SlideInWidget(
+        delay: Duration(milliseconds: delay),
+        child: BouncingButton(
+          onPressed: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: AppShadows.cardShadow,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color.withOpacity(0.5), size: 28),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  subject,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Color(0xFF2D3436),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text(
+                    "🔒 COMING SOON",
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFD68910),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return SlideInWidget(
       delay: Duration(milliseconds: delay),
       child: StreamBuilder<SubjectProgress>(
@@ -445,8 +644,8 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
                                   LevelBadge(xp: xp, compact: true),
                                   const Spacer(),
                                   Text(
-                                    "$xp / $nextLevelXP XP",
-                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                    "${LevelSystem.getCurrentLevelXP(xp)} / ${LevelSystem.xpPerLevel} XP",
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.bold),
                                   ),
                                 ],
                               ),
@@ -459,9 +658,18 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              Text(
-                                "${(progress * 100).toInt()}% to Level ${level + 1}",
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    "${(progress * 100).toInt()}% to Level ${level + 1}",
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                  ),
+                                  Text(
+                                    "Total: $xp XP",
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: LevelSystem.getLevelColor(level)),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -548,13 +756,20 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Text("My Subjects", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const Text(
+                    "My Subjects",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2D3436),
+                    ),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
 
-            // Subject Grid with Real Progress
+            // Subject Grid with Sisupal 2.0 Subject System
             GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -563,37 +778,64 @@ class _StudentDashboardState extends State<StudentDashboard> with TickerProvider
               mainAxisSpacing: 16,
               childAspectRatio: 0.95,
               children: [
+                // 1. Mathematics (AVAILABLE -> MathsKingdomScreen)
                 _buildSubjectCard(
                   subject: "Mathematics",
                   icon: Icons.calculate_outlined,
                   color: AppColors.mathOrange,
                   delay: 500,
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LessonListScreen(subject: "Mathematics", color: AppColors.mathOrange, studentGrade: _studentGrade))),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MathsKingdomScreen(studentGrade: _studentGrade),
+                    ),
+                  ),
                 ),
-                _buildSubjectCard(
-                  subject: "Sinhala",
-                  icon: Icons.auto_stories_outlined,
-                  color: AppColors.sinhalaViolet,
-                  delay: 600,
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LessonListScreen(subject: "Sinhala", color: AppColors.sinhalaViolet, studentGrade: _studentGrade))),
-                ),
+
+                // 2. Environment (LOCKED)
                 _buildSubjectCard(
                   subject: "Environment",
                   icon: Icons.public,
                   color: AppColors.environmentGreen,
-                  delay: 700,
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LessonListScreen(subject: "Environment", color: AppColors.environmentGreen, studentGrade: _studentGrade))),
+                  delay: 600,
+                  isLocked: true,
+                  onTap: () => _showLockedSubjectDialog(context, "Environment"),
                 ),
+
+                // 3. Sinhala (LOCKED)
+                _buildSubjectCard(
+                  subject: "Sinhala",
+                  icon: Icons.auto_stories_outlined,
+                  color: AppColors.sinhalaViolet,
+                  delay: 700,
+                  isLocked: true,
+                  onTap: () => _showLockedSubjectDialog(context, "Sinhala"),
+                ),
+
+                // 4. Buddhism (LOCKED)
+                _buildSubjectCard(
+                  subject: "Buddhism",
+                  icon: Icons.brightness_7_outlined,
+                  color: AppColors.buddhismAmber,
+                  delay: 800,
+                  isLocked: true,
+                  onTap: () => _showLockedSubjectDialog(context, "Buddhism"),
+                ),
+
+                // 5. English (LOCKED)
                 _buildSubjectCard(
                   subject: "English",
                   icon: Icons.language,
                   color: AppColors.languageTeal,
-                  delay: 800,
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LanguageTabsScreen(grade: _studentGrade))),
+                  delay: 900,
+                  isLocked: true,
+                  onTap: () => _showLockedSubjectDialog(context, "English"),
                 ),
+
+                // 6. Past Papers (Grade 5)
                 if (_studentGrade == 5)
                   SlideInWidget(
-                    delay: const Duration(milliseconds: 900),
+                    delay: const Duration(milliseconds: 1000),
                     child: BouncingButton(
                       onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PastPaperSelector())),
                       child: Container(

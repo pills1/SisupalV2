@@ -11,7 +11,7 @@ dependencies:
     sdk: flutter
 
   # --- YOUR PACKAGES ---
-  syncfusion_flutter_pdfviewer: ^24.1.41
+  syncfusion_flutter_pdfviewer: ^28.2.9
   cupertino_icons: ^1.0.8
   flutter_tts: ^3.8.5
   audioplayers: ^6.0.0
@@ -33,7 +33,7 @@ dependencies:
   cloud_firestore: ^5.0.0
 
   # UI & State
-  google_fonts: ^6.0.0
+  google_fonts: ^8.0.2
   provider: ^6.0.0
   shared_preferences: ^2.5.3
   path_provider: ^2.1.5
@@ -49,5 +49,6 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/games/
     - assets/pdfs/
     - assets/sounds/

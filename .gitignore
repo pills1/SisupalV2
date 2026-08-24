@@ -43,3 +43,16 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Next.js Admin Dashboard
+admin-dashboard/node_modules/
+admin-dashboard/.next/
+admin-dashboard/.env.local
+admin-dashboard/tsconfig.tsbuildinfo
+node_modules/
+
+# Local logs and temp files
+*.apk
+*.aab
+analyze_output.txt
+.env*.local

@@ -134,16 +134,14 @@ class _AddVideoScreenState extends State<AddVideoScreen> {
               ),
               const SizedBox(height: 16),
 
-              // --- NEW: Grade Dropdown ---
+              // Target Grade Dropdown
               DropdownButtonFormField<int>(
-                value: _selectedGrade,
+                value: 5,
                 decoration: const InputDecoration(labelText: "Target Grade", border: OutlineInputBorder()),
                 items: const [
-                  DropdownMenuItem(value: 3, child: Text("Grade 3 (Fun Basics)")),
-                  DropdownMenuItem(value: 4, child: Text("Grade 4 (Foundation)")),
-                  DropdownMenuItem(value: 5, child: Text("Grade 5 (Scholarship)")),
+                  DropdownMenuItem(value: 5, child: Text("Grade 5 (Scholarship Exam)")),
                 ],
-                onChanged: (val) => setState(() => _selectedGrade = val!),
+                onChanged: (val) => setState(() => _selectedGrade = val ?? 5),
               ),
               const SizedBox(height: 16),
               // ---------------------------

@@ -49,35 +49,17 @@ class _LessonList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- FIX: ADDED GRADE FILTERING LOGIC HERE ---
     Query query = FirebaseFirestore.instance
         .collection('lessons')
-        .where('subject', isEqualTo: subject);
-
-    // If the student is NOT Grade 5, only show their specific grade.
-    if (grade != 5) {
-      query = query.where('grade', isEqualTo: grade);
-    }
-    // ---------------------------------------------
+        .where('subject', isEqualTo: subject)
+        .where('grade', isEqualTo: 5);
 
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
-        final lessons = snapshot.data!.docs;
-
-        // --- NEW: Extra Filter for Grade 5 ---
-        // (Optional) Hide lower grade lessons from Grade 5 students logic
-        var filteredLessons = lessons.where((doc) {
-          var data = doc.data() as Map<String, dynamic>;
-          int? lessonGrade = data['grade'];
-          // If I am Grade 5, hide Grade 3 & 4 stuff so it's not cluttered
-          if (grade == 5 && (lessonGrade == 3 || lessonGrade == 4)) {
-            return false;
-          }
-          return true;
-        }).toList();
+        final filteredLessons = snapshot.data!.docs;
 
         if (filteredLessons.isEmpty) {
           return Center(
@@ -86,7 +68,7 @@ class _LessonList extends StatelessWidget {
               children: [
                 Icon(Icons.menu_book, size: 60, color: Colors.grey.shade300),
                 const SizedBox(height: 10),
-                Text("No Grade $grade lessons yet!", style: const TextStyle(color: Colors.grey)),
+                const Text("No Grade 5 lessons found yet!", style: TextStyle(color: Colors.grey)),
               ],
             ),
           );

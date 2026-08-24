@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'quiz_screen.dart';
 import 'video_lesson_screen.dart';
+import 'maths/maths_lesson_player_screen.dart';
+import 'maths/golden_mango_lesson_screen.dart';
 
 class LessonListScreen extends StatelessWidget {
   final String subject;
@@ -19,16 +21,13 @@ class LessonListScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     Query query = FirebaseFirestore.instance
         .collection('lessons')
-        .where('subject', isEqualTo: subject);
-
-    if (studentGrade != 5) {
-      query = query.where('grade', isEqualTo: studentGrade);
-    }
+        .where('subject', isEqualTo: subject)
+        .where('grade', isEqualTo: 5);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: AppBar(
-        title: Text("$subject (Grade $studentGrade)"),
+        title: Text("$subject (Grade 5)"),
         backgroundColor: color,
         foregroundColor: Colors.white,
       ),
@@ -40,15 +39,15 @@ class LessonListScreen extends StatelessWidget {
           var docs = snapshot.data!.docs;
 
           if (docs.isEmpty) {
-            return Center(
+            return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.school_outlined, size: 60, color: Colors.grey.shade400),
-                  const SizedBox(height: 16),
+                  Icon(Icons.school_outlined, size: 60, color: Colors.grey),
+                  SizedBox(height: 16),
                   Text(
-                    "No Grade $studentGrade lessons yet.",
-                    style: const TextStyle(fontSize: 18, color: Colors.grey),
+                    "No Grade 5 lessons yet.",
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
                   ),
                 ],
               ),
@@ -63,12 +62,7 @@ class LessonListScreen extends StatelessWidget {
               String title = data['title'] ?? subject;
               String lessonId = docs[index].id;
               String? videoUrl = data['videoUrl'];
-              int? lessonGrade = data['grade'];
               String description = data['description'] ?? "Click to start lesson";
-
-              if (studentGrade == 5 && (lessonGrade == 3 || lessonGrade == 4)) {
-                return const SizedBox.shrink();
-              }
 
               return Card(
                 elevation: 4,
@@ -93,6 +87,16 @@ class LessonListScreen extends StatelessWidget {
                   ),
                   trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey),
                   onTap: () {
+                    if (subject == "Mathematics") {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => GoldenMangoLessonScreen(studentGrade: studentGrade),
+                        ),
+                      );
+                      return;
+                    }
+
                     if (videoUrl != null && videoUrl.isNotEmpty) {
                       Navigator.push(
                         context,

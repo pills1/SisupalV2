@@ -104,6 +104,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         icon = Icons.flag;
         iconColor = Colors.purple;
         break;
+      case NotificationType.mathsQuest:
+        icon = Icons.map_rounded;
+        iconColor = AppColors.mathOrange;
+        break;
+      case NotificationType.pastPaper:
+        icon = Icons.description_rounded;
+        iconColor = const Color(0xFF6C5CE7);
+        break;
     }
 
     return Dismissible(

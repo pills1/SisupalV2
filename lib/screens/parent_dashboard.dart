@@ -1,12 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart';
-import '../utils/app_theme.dart';
-import '../widgets/animated_widgets.dart';
+import '../models/parent/parent_analytics_model.dart';
+import '../models/parent/parent_notification_model.dart';
+import '../services/parent_analytics_service.dart';
+import '../widgets/parent/parent_header.dart';
+import '../widgets/parent/child_summary_hero_card.dart';
+import '../widgets/parent/quick_stats_grid.dart';
+import '../widgets/parent/maths_progress_card.dart';
+import '../widgets/parent/focus_areas_card.dart';
+import '../widgets/parent/learning_strengths_card.dart';
+import '../widgets/parent/learning_trend_chart.dart';
+import '../widgets/parent/learning_insight_card.dart';
+import '../widgets/parent/parent_notifications_modal.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
 import 'report_preview_screen.dart';
+import 'maths/golden_mango_lesson_screen.dart';
+import 'maths/number_train_lesson_screen.dart';
 
 class ParentDashboard extends StatefulWidget {
   const ParentDashboard({super.key});
@@ -16,448 +26,411 @@ class ParentDashboard extends StatefulWidget {
 }
 
 class _ParentDashboardState extends State<ParentDashboard> {
-  final TextEditingController _emailController = TextEditingController();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ParentAnalyticsService _analyticsService = ParentAnalyticsService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // State variables
-  Map<String, dynamic>? _studentData;
-  List<Map<String, dynamic>> _examHistory = [];
-  bool _isLoading = false;
-  bool _isLinked = false;
+  ParentAnalyticsModel? _analytics;
+  List<ParentNotificationModel> _notifications = [];
+  bool _isLoading = true;
   String? _errorMessage;
-  int _achievementCount = 0;
-  int _videosWatched = 0;
 
   @override
   void initState() {
     super.initState();
-    _checkForLinkedChild();
+    _loadDashboardData();
   }
 
-  Future<void> _checkForLinkedChild() async {
-    User? parent = _auth.currentUser;
-    if (parent == null) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      DocumentSnapshot parentDoc = await _firestore.collection('users').doc(parent.uid).get();
-      if (parentDoc.exists && parentDoc.data() != null) {
-        var data = parentDoc.data() as Map<String, dynamic>;
-        if (data.containsKey('linkedStudentUid')) {
-          await _loadStudentData(data['linkedStudentUid'], isLinked: true);
-        }
-      }
-    } catch (e) {
-      print("Error checking link: $e");
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _linkChild() async {
-    User? parent = _auth.currentUser;
-    if (parent == null || _studentData == null) return;
-    setState(() => _isLoading = true);
-    try {
-      await _firestore.collection('users').doc(parent.uid).update({
-        'linkedStudentUid': _studentData!['uid'],
-      });
-      setState(() => _isLinked = true);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Child Linked!"), backgroundColor: Colors.green));
-    } catch (e) {
-      print(e);
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _unlinkChild() async {
-    User? parent = _auth.currentUser;
-    if (parent == null) return;
-    setState(() => _isLoading = true);
-    try {
-      await _firestore.collection('users').doc(parent.uid).update({
-        'linkedStudentUid': FieldValue.delete(),
-      });
-      setState(() {
-        _studentData = null;
-        _examHistory = [];
-        _isLinked = false;
-        _emailController.clear();
-      });
-    } catch (e) {
-      print(e);
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _searchStudent() async {
-    String email = _emailController.text.trim();
-    if (email.isEmpty) return;
-
+  Future<void> _loadDashboardData() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
-      _studentData = null;
-      _examHistory = [];
-      _isLinked = false;
     });
 
     try {
-      final querySnapshot = await _firestore
-          .collection('users')
-          .where('email', isEqualTo: email)
-          .where('role', isEqualTo: 'Student')
-          .limit(1)
-          .get();
-
-      if (querySnapshot.docs.isEmpty) {
+      final analytics = await _analyticsService.fetchParentAnalytics();
+      if (mounted) {
         setState(() {
-          _errorMessage = "No student found.";
+          _analytics = analytics;
           _isLoading = false;
         });
-        return;
       }
-      await _loadStudentData(querySnapshot.docs.first.id, isLinked: false);
-
     } catch (e) {
-      setState(() => _errorMessage = "Error: $e");
-    } finally {
-      setState(() => _isLoading = false);
+      print('Error loading Parent Dashboard analytics: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Unable to load progress data. Please try again.';
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  Future<void> _loadStudentData(String uid, {required bool isLinked}) async {
-    try {
-      DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
-      Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-      data['uid'] = uid;
+  void _onPracticeNavigate(String lessonId, String conceptId) {
+    int conceptIdx = 0;
+    if (conceptId == 'c2_number_train_ordering') conceptIdx = 1;
+    if (conceptId == 'c3_digit_card_train') conceptIdx = 2;
+    if (conceptId == 'c4_thousands_mountain') conceptIdx = 3;
 
-      final historySnapshot = await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('exam_results')
-          .orderBy('date', descending: true)
-          .get();
-
-      final historyList = historySnapshot.docs.map((d) {
-        var hData = d.data();
-        if (hData['date'] != null) {
-          Timestamp t = hData['date'];
-          hData['formattedDate'] = DateFormat('MMM d, h:mm a').format(t.toDate());
-        } else {
-          hData['formattedDate'] = "Unknown";
-        }
-        return hData;
-      }).toList();
-
-      // Fetch achievements count
-      final achievementsSnapshot = await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('achievements')
-          .get();
-
-      // Fetch videos watched count
-      final videosSnapshot = await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('video_progress')
-          .get();
-
-      setState(() {
-        _studentData = data;
-        _examHistory = historyList;
-        _isLinked = isLinked;
-        _achievementCount = achievementsSnapshot.docs.length;
-        _videosWatched = videosSnapshot.docs.length;
-      });
-    } catch (e) {
-      print("Error loading: $e");
+    if (lessonId == 'math_grade5_01') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GoldenMangoLessonScreen(
+            studentGrade: _analytics?.grade ?? 5,
+            conceptIndex: conceptIdx,
+          ),
+        ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GreatNumberTrainLessonScreen(
+            studentGrade: _analytics?.grade ?? 5,
+            conceptIndex: conceptIdx,
+          ),
+        ),
+      );
     }
-  }
-
-  // --- NEW: LOGIC TO CALCULATE AVERAGES ---
-  Map<String, double> _calculateSubjectAverages() {
-    Map<String, List<int>> scores = {}; // Map of Subject -> List of Percentages
-
-    for (var exam in _examHistory) {
-      String title = exam['examTitle'] ?? "";
-      String subject = "Other";
-
-      // Detect Subject from Title (e.g., "Mathematics Practice")
-      if (title.contains("Math")) subject = "Math";
-      else if (title.contains("Sinhala")) subject = "Sinhala";
-      else if (title.contains("Environment")) subject = "Env";
-      else if (title.contains("English")) subject = "English";
-      else if (title.contains("Tamil")) subject = "Tamil";
-
-      int score = exam['score'] ?? 0;
-      int total = exam['total'] ?? 1;
-      int percentage = ((score / total) * 100).round();
-
-      if (!scores.containsKey(subject)) {
-        scores[subject] = [];
-      }
-      scores[subject]!.add(percentage);
-    }
-
-    // Calculate Averages
-    Map<String, double> averages = {};
-    scores.forEach((key, value) {
-      double avg = value.reduce((a, b) => a + b) / value.length;
-      averages[key] = avg;
-    });
-
-    return averages;
   }
 
   @override
   Widget build(BuildContext context) {
-    // Calculate stats whenever UI builds
-    final subjectStats = _calculateSubjectAverages();
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4F8),
+      backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
-        title: const Text("Parent Dashboard"),
+        title: const Text('Parent Dashboard 2.0 🛡️'),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await _auth.signOut();
-              if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
-            },
-          ),
-          // --- NEW: Profile Button ---
-          IconButton(
-            icon: const Icon(Icons.person, color: Colors.black), // Use white for ParentDashboard if needed
+            icon: const Icon(Icons.person),
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
               );
             },
           ),
-          // ---------------------------
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await _auth.signOut();
+              if (mounted) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                );
+              }
+            },
+          ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      body: StreamBuilder<List<ParentNotificationModel>>(
+        stream: _analyticsService.streamNotifications(),
+        builder: (context, notifSnapshot) {
+          _notifications = notifSnapshot.data ?? [];
 
-            // Search Box (Only if not linked)
-            if (!_isLinked)
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    children: [
-                      const Text("Find Your Child", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.indigo)),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _emailController,
-                        decoration: InputDecoration(
-                          labelText: "Student Email",
-                          prefixIcon: const Icon(Icons.email_outlined),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          suffixIcon: IconButton(icon: const Icon(Icons.search, color: Colors.indigo), onPressed: _searchStudent),
-                        ),
-                      ),
-                      if (_errorMessage != null)
-                        Padding(padding: const EdgeInsets.only(top: 10), child: Text(_errorMessage!, style: const TextStyle(color: Colors.red))),
-                    ],
-                  ),
-                ),
-              ),
-
-            if (_isLoading) const Center(child: Padding(padding: EdgeInsets.all(20.0), child: CircularProgressIndicator())),
-
-            // --- STUDENT PROFILE ---
-            if (_studentData != null) ...[
-              const SizedBox(height: 20),
-              // Profile Header
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Colors.blue, Colors.indigo]),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
-                ),
-                child: Row(
+          if (_isLoading) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const CircleAvatar(radius: 35, backgroundColor: Colors.white, child: Icon(Icons.face, size: 40, color: Colors.indigo)),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(_studentData!['name'] ?? "Unknown", style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                          Text("Grade ${_studentData!['grade'] ?? 'N/A'}", style: const TextStyle(color: Colors.white70, fontSize: 16)),
-                        ],
-                      ),
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Analyzing learner progress & telemetry...',
+                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
                     ),
-                    if (_isLinked) IconButton(icon: const Icon(Icons.link_off, color: Colors.white70), onPressed: _unlinkChild),
                   ],
                 ),
               ),
+            );
+          }
 
-              // Link Button (If not linked)
-              if (!_isLinked) ...[
-                const SizedBox(height: 10),
-                ElevatedButton.icon(
-                  onPressed: _linkChild,
-                  icon: const Icon(Icons.save),
-                  label: const Text("Link this Account"),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                )
-              ],
+          if (_errorMessage != null || _analytics == null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline_rounded, size: 48, color: Colors.redAccent),
+                    const SizedBox(height: 12),
+                    Text(
+                      _errorMessage ?? 'An error occurred loading analytics.',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _loadDashboardData,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
 
-              // --- ENHANCED: QUICK STATS ROW ---
-              const SizedBox(height: 20),
-              Row(
+          final analytics = _analytics!;
+
+          return RefreshIndicator(
+            onRefresh: _loadDashboardData,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
                 children: [
-                  _buildQuickStat("⭐", "${_studentData!['xp'] ?? 0}", "XP", AppColors.primaryGradient),
-                  const SizedBox(width: 8),
-                  _buildQuickStat("🔥", "${_studentData!['streak'] ?? 0}", "Day Streak", AppColors.sunsetGradient),
-                  const SizedBox(width: 8),
-                  _buildQuickStat("🏆", "$_achievementCount", "Badges", AppColors.successGradient),
-                  const SizedBox(width: 8),
-                  _buildQuickStat("📺", "$_videosWatched", "Videos", const LinearGradient(colors: [Colors.red, Colors.redAccent])),
+                  // SECTION 1: Parent Header
+                  ParentHeaderWidget(
+                    studentName: analytics.studentName,
+                    notifications: _notifications,
+                    onNotificationTap: () {
+                      ParentNotificationsModal.show(
+                        context,
+                        notifications: _notifications,
+                        onMarkRead: (id) => _analyticsService.markNotificationRead(id),
+                      );
+                    },
+                    onSettingsTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                      );
+                    },
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // SECTION 2: Hero Summary Card
+                        ChildSummaryHeroCard(analytics: analytics),
+                        const SizedBox(height: 20),
+
+                        // SECTION 3: Quick Statistics Grid
+                        QuickStatsGridWidget(analytics: analytics),
+                        const SizedBox(height: 24),
+
+                        // SECTION 4: Weekly Learning Insight
+                        LearningInsightCardWidget(weeklyInsight: analytics.weeklyInsight),
+                        const SizedBox(height: 24),
+
+                        // SECTION 5: Mathematics Progress & Concept Pathways
+                        MathsProgressCardWidget(analytics: analytics),
+                        const SizedBox(height: 24),
+
+                        // SECTION 6: Focus Areas (Needs Practice)
+                        FocusAreasCardWidget(
+                          focusAreas: analytics.focusAreas,
+                          recommendation: analytics.recommendedNextStep,
+                          onPracticeTap: _onPracticeNavigate,
+                        ),
+                        const SizedBox(height: 24),
+
+                        // SECTION 7: Learning Strengths (Mastered Skills)
+                        LearningStrengthsCardWidget(strengths: analytics.strengths),
+                        const SizedBox(height: 24),
+
+                        // SECTION 8: Learning Trend Timeline
+                        LearningTrendChartWidget(trendData: analytics.trendData),
+                        const SizedBox(height: 24),
+
+                        // SECTION 9: PDF Report Export Card
+                        _buildPdfReportCard(context, analytics),
+                        const SizedBox(height: 24),
+
+                        // SECTION 10: Recent Activity Feed
+                        _buildRecentActivitySection(analytics),
+                        const SizedBox(height: 32),
+                      ],
+                    ),
+                  ),
                 ],
               ),
-
-              // --- REPORT CARD BUTTON ---
-              Card(
-                  elevation: 4,
-                  color: Colors.blueGrey.shade50,
-                  margin: const EdgeInsets.only(bottom: 20, top: 20),
-                  child: ListTile(
-                      leading: const Icon(Icons.picture_as_pdf, color: Colors.redAccent, size: 40),
-                      title: const Text("Download Report Card", style: TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: const Text("Get a PDF summary of progress"),
-                      trailing: const Icon(Icons.arrow_forward_ios),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const ReportPreviewScreen()),
-                        );
-                      },
-                  ),
-              ),
-
-              // --- NEW: SUBJECT PERFORMANCE CARDS ---
-              if (subjectStats.isNotEmpty) ...[
-                const SizedBox(height: 25),
-                const Text("Performance Overview", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-                const SizedBox(height: 12),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: subjectStats.entries.map((entry) {
-                      return _buildSubjectCard(entry.key, entry.value);
-                    }).toList(),
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 25),
-              const Text("Recent Activity", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-              const SizedBox(height: 12),
-
-              // Activity List
-              if (_examHistory.isEmpty)
-                const Center(child: Text("No exams taken yet.", style: TextStyle(color: Colors.grey)))
-              else
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _examHistory.length,
-                  itemBuilder: (context, index) {
-                    var exam = _examHistory[index];
-                    int score = exam['score'] ?? 0;
-                    int total = exam['total'] ?? 0;
-                    double percentage = total == 0 ? 0 : (score / total);
-
-                    return Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        leading: CircularProgressIndicator(
-                          value: percentage,
-                          backgroundColor: Colors.grey.shade200,
-                          color: score >= (total * 0.75) ? Colors.green : (score >= total/2 ? Colors.orange : Colors.red),
-                        ),
-                        title: Text(exam['examTitle'] ?? "Quiz", style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(exam['formattedDate']),
-                        trailing: Text("$score / $total", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
-                      ),
-                    );
-                  },
-                ),
-            ],
-          ],
-        ),
+            ),
+          );
+        },
       ),
     );
   }
 
-  // Helper to build the colorful subject cards
-  Widget _buildSubjectCard(String subject, double percentage) {
-    Color color;
-    if (percentage >= 80) color = Colors.green;
-    else if (percentage >= 50) color = Colors.orange;
-    else color = Colors.red;
-
-    return Container(
-      margin: const EdgeInsets.only(right: 12),
-      padding: const EdgeInsets.all(16),
-      width: 120,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 5, offset: const Offset(0, 2))],
-        border: Border.all(color: color.withOpacity(0.3), width: 2),
-      ),
-      child: Column(
-        children: [
-          Text(subject, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
-          const SizedBox(height: 8),
-          Text("${percentage.toInt()}%", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickStat(String emoji, String value, String label, Gradient gradient) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        decoration: BoxDecoration(
-          gradient: gradient,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 5, offset: const Offset(0, 2))],
-        ),
-        child: Column(
+  /// PDF Report Export Launcher Card
+  Widget _buildPdfReportCard(BuildContext context, ParentAnalyticsModel analytics) {
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      color: const Color(0xFFF0F3F8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 20)),
-            const SizedBox(height: 4),
-            Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-            Text(label, style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.9))),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.picture_as_pdf_rounded, color: Colors.redAccent, size: 32),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Download Official PDF Report',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2D3436),
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Generate formal Sri Lankan Grade 5 progress summary report for printing.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ReportPreviewScreen(
+                      preSelectedUserId: analytics.studentUid,
+                      preSelectedUserName: analytics.studentName,
+                      analytics: analytics,
+                    ),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE74C3C),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: const Text('Export PDF', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  /// Recent Activity Feed List
+  Widget _buildRecentActivitySection(ParentAnalyticsModel analytics) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Text(
+              '🕒 RECENT ACTIVITY HISTORY',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.1,
+                color: Color(0xFF2D3436),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        if (analytics.recentActivities.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: const Center(
+              child: Text(
+                'No recent exam or quiz attempts recorded yet.',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ),
+          )
+        else
+          ...analytics.recentActivities.map((act) {
+            final percInt = (act.percentage * 100).toInt();
+            Color statusColor = const Color(0xFF2ECC71);
+            if (act.percentage < 0.50) {
+              statusColor = const Color(0xFFE74C3C);
+            } else if (act.percentage < 0.75) {
+              statusColor = const Color(0xFFF39C12);
+            }
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: CircularProgressIndicator(
+                      value: act.percentage,
+                      backgroundColor: Colors.grey.shade200,
+                      color: statusColor,
+                      strokeWidth: 4,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          act.title,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2D3436),
+                          ),
+                        ),
+                        Text(
+                          '${act.lessonName} • Score: ${act.score} / ${act.total}',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '$percInt%',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+      ],
     );
   }
 }

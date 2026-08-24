@@ -1,23 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'screens/splash_screen.dart';
 import 'utils/app_theme.dart';
 import 'providers/theme_provider.dart';
+import 'services/math_curriculum_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp
-    (options: const FirebaseOptions(
+  await Firebase.initializeApp(
+    options: const FirebaseOptions(
       apiKey: "AIzaSyAHn3e3YIOH-TvQOL6HF-JTvwXXH97tBS4",
       authDomain: "sisupal-782d3.firebaseapp.com",
       projectId: "sisupal-782d3",
       storageBucket: "sisupal-782d3.firebasestorage.app",
       messagingSenderId: "213942877787",
-      appId: "1:213942877787:web:814aadc8f8fd5e523a497e"
+      appId: "1:213942877787:web:814aadc8f8fd5e523a497e",
     ),
   );
+
+  // Enable Firestore Offline Persistence & Unlimited Local Cache
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
+
+  // Start real-time Firestore sync & background cache for Math Curriculum
+  MathCurriculumService().initialize();
 
   runApp(
     ChangeNotifierProvider(

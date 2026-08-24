@@ -758,6 +758,7 @@ class SubjectProgressCard extends StatelessWidget {
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
+                color: Color(0xFF2D3436),
               ),
               textAlign: TextAlign.center,
             ),

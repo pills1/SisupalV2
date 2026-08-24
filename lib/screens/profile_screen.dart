@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:provider/provider.dart';
 import '../utils/app_theme.dart';
 import '../widgets/animated_widgets.dart';
 import '../widgets/gamification_widgets.dart';
-import '../providers/theme_provider.dart';
 import '../services/achievement_service.dart';
-import '../services/export_service.dart';
+import '../widgets/user_avatar.dart';
 import 'login_screen.dart';
+import 'report_preview_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -21,16 +20,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   final User? user = FirebaseAuth.instance.currentUser;
   late TabController _tabController;
 
-  final List<String> avatars = [
-    'https://cdn-icons-png.flaticon.com/512/4140/4140048.png',
-    'https://cdn-icons-png.flaticon.com/512/4140/4140047.png',
-    'https://cdn-icons-png.flaticon.com/512/616/616408.png',
-    'https://cdn-icons-png.flaticon.com/512/616/616450.png',
-    'https://cdn-icons-png.flaticon.com/512/616/616568.png',
-    'https://cdn-icons-png.flaticon.com/512/616/616430.png',
-    'https://cdn-icons-png.flaticon.com/512/4140/4140037.png',
-    'https://cdn-icons-png.flaticon.com/512/4140/4140051.png',
-  ];
+  final List<Map<String, String>> avatars = AppAvatars.defaultList;
 
   @override
   void initState() {
@@ -78,12 +68,33 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
             return const Center(child: CircularProgressIndicator());
           }
 
-          var data = snapshot.data!.data() as Map<String, dynamic>;
-          String name = data['name'] ?? "Student";
+          final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+          String name = "Student";
+          for (final key in [
+            'studentName',
+            'student_name',
+            'name',
+            'displayName',
+            'display_name',
+            'fullName',
+          ]) {
+            final val = data[key];
+            if (val is String && val.trim().isNotEmpty) {
+              name = val.trim();
+              break;
+            }
+          }
+          if (name == "Student" && data['parentName'] is String && (data['parentName'] as String).trim().isNotEmpty) {
+            name = (data['parentName'] as String).trim();
+          }
+          final currentUser = user ?? FirebaseAuth.instance.currentUser;
+          if (name == "Student" && currentUser?.displayName != null && currentUser!.displayName!.trim().isNotEmpty) {
+            name = currentUser.displayName!.trim();
+          }
           int grade = data['grade'] ?? 5;
           int xp = data['xp'] ?? 0;
           int streak = data['streak'] ?? 0;
-          String currentAvatar = data['avatar'] ?? avatars[2];
+          String currentAvatar = AppAvatars.extractAvatarString(data['avatar']);
           
           final level = LevelSystem.getLevel(xp);
           final levelTitle = LevelSystem.getLevelTitle(level);
@@ -141,22 +152,10 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                                   ),
                                 ),
                                 // Avatar
-                                Container(
-                                  width: 100,
-                                  height: 100,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 4),
-                                    image: currentAvatar.startsWith('http')
-                                        ? DecorationImage(
-                                            image: NetworkImage(currentAvatar),
-                                            fit: BoxFit.cover,
-                                          )
-                                        : null,
-                                  ),
-                                  child: !currentAvatar.startsWith('http')
-                                      ? Center(child: Text(currentAvatar, style: const TextStyle(fontSize: 48)))
-                                      : null,
+                                UserAvatar(
+                                  avatar: currentAvatar,
+                                  size: 100,
+                                  border: Border.all(color: Colors.white, width: 4),
                                 ),
                                 // Edit badge
                                 Positioned(
@@ -216,53 +215,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                   ),
                 ),
                 actions: [
-                  // Theme toggle
-                  IconButton(
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Consumer<ThemeProvider>(
-                        builder: (context, themeProvider, _) {
-                          return Icon(
-                            themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-                            color: Colors.white,
-                            size: 20,
-                          );
-                        },
-                      ),
-                    ),
-                    onPressed: () {
-                      context.read<ThemeProvider>().toggleTheme();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            children: [
-                              Icon(
-                                context.read<ThemeProvider>().isDarkMode 
-                                    ? Icons.dark_mode 
-                                    : Icons.light_mode,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                context.read<ThemeProvider>().isDarkMode 
-                                    ? "Switched to Dark Mode 🌙" 
-                                    : "Switched to Light Mode ☀️",
-                              ),
-                            ],
-                          ),
-                          backgroundColor: context.read<ThemeProvider>().isDarkMode 
-                              ? Colors.grey.shade800 
-                              : Colors.blue,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      );
-                    },
-                  ),
                   // Logout
                   IconButton(
                     icon: Container(
@@ -364,7 +316,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                             controller: _tabController,
                             children: [
                               _buildAchievementsTab(xp, streak),
-                              _buildProgressTab(xp, level, progress),
+                              _buildProgressTab(xp, level, progress, name),
                             ],
                           ),
                         ),
@@ -470,10 +422,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     );
   }
 
-  Widget _buildProgressTab(int xp, int level, double progress) {
-    final nextLevelXP = LevelSystem.getXPForNextLevel(xp);
-    final currentLevelXP = (level - 1) * LevelSystem.xpPerLevel;
-    
+  Widget _buildProgressTab(int xp, int level, double progress, String name) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -524,7 +473,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            "$xp / $nextLevelXP XP",
+                            "${LevelSystem.getCurrentLevelXP(xp)} / ${LevelSystem.xpPerLevel} XP",
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade500,
@@ -562,7 +511,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                   final isCurrent = level == lvl;
                   
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
                       children: [
                         Container(
@@ -604,7 +553,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           ),
           const SizedBox(height: 16),
           
-          // Export Section
+          // Export Section (Official PDF Progress Report)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -615,31 +564,27 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  "Export Your Data",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const SizedBox(height: 12),
-                Row(
+                const Row(
                   children: [
-                    Expanded(
-                      child: _buildExportButton(
-                        icon: Icons.picture_as_pdf,
-                        label: "PDF Report",
-                        color: Colors.red,
-                        onTap: () => _exportPDF(),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildExportButton(
-                        icon: Icons.table_chart,
-                        label: "CSV Data",
-                        color: Colors.green,
-                        onTap: () => _exportCSV(),
-                      ),
+                    Icon(Icons.description_rounded, color: Colors.blue, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      "Official Progress Report",
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                   ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  "View, print, or download your complete academic progress report card as a PDF.",
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
+                const SizedBox(height: 14),
+                _buildExportButton(
+                  icon: Icons.picture_as_pdf_rounded,
+                  label: "View & Download PDF Report",
+                  color: Colors.red.shade700,
+                  onTap: () => _exportPDF(name),
                 ),
               ],
             ),
@@ -713,12 +658,14 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (context) => Container(
         padding: const EdgeInsets.all(24),
-        height: 400,
+        height: 520,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
         child: Column(
           children: [
             // Handle
@@ -730,46 +677,67 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             const Text(
-              "Choose Your Avatar",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              "ඔබේ Avatar රූපය තෝරන්න 🎭",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
-              "Pick a character that represents you!",
-              style: TextStyle(color: Colors.grey.shade600),
+              "ඔබව නියෝජනය කරන චරිතය තෝරාගන්න!",
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Expanded(
               child: GridView.builder(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 14,
+                  childAspectRatio: 0.85,
                 ),
                 itemCount: avatars.length,
                 itemBuilder: (context, index) {
+                  final item = avatars[index];
+                  final val = item['value'] ?? '';
+                  final label = item['label'] ?? '';
+
                   return BouncingButton(
-                    onPressed: () => _updateAvatar(avatars[index]),
+                    onPressed: () => _updateAvatar(val),
                     child: Container(
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        gradient: AppColors.primaryGradient,
-                        shape: BoxShape.circle,
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.purple.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.04),
                             blurRadius: 8,
-                            offset: const Offset(0, 4),
+                            offset: const Offset(0, 3),
                           ),
                         ],
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Image.network(
-                          avatars[index],
-                          errorBuilder: (_, __, ___) => const Icon(Icons.person, color: Colors.white),
-                        ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          UserAvatar(
+                            avatar: val,
+                            size: 64,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            label,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF334155),
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -815,56 +783,16 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     );
   }
 
-  void _exportPDF() async {
-    try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Generating PDF report...")),
-      );
-      await ExportService().exportProgressPDF();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("✅ PDF downloaded successfully!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Failed to export: $e"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _exportCSV() async {
-    try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Exporting quiz history...")),
-      );
-      await ExportService().exportQuizHistoryCSV();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("✅ CSV downloaded successfully!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Failed to export: $e"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+  void _exportPDF(String name) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReportPreviewScreen(
+          preSelectedUserId: user?.uid,
+          preSelectedUserName: name,
+        ),
+      ),
+    );
   }
 
   void _showLogoutDialog() {

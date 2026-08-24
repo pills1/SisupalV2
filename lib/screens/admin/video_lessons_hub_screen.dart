@@ -135,36 +135,14 @@ class VideoLessonsHubScreen extends StatelessWidget {
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
                     _GradeCard(
-                      grade: 3,
-                      title: "Grade 3",
-                      subtitle: "Fun Basics",
-                      emoji: "🌟",
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF11998e), Color(0xFF38ef7d)],
-                      ),
-                      delay: 100,
-                    ),
-                    const SizedBox(height: 16),
-                    _GradeCard(
-                      grade: 4,
-                      title: "Grade 4",
-                      subtitle: "Foundation Building",
-                      emoji: "📚",
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFfc4a1a), Color(0xFFf7b733)],
-                      ),
-                      delay: 200,
-                    ),
-                    const SizedBox(height: 16),
-                    _GradeCard(
                       grade: 5,
                       title: "Grade 5",
-                      subtitle: "Scholarship Prep",
+                      subtitle: "Scholarship Exam Prep",
                       emoji: "🏆",
                       gradient: const LinearGradient(
                         colors: [Color(0xFF667eea), Color(0xFF764ba2)],
                       ),
-                      delay: 300,
+                      delay: 100,
                     ),
                   ]),
                 ),
